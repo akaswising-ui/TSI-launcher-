@@ -162,6 +162,7 @@ class JavaRuntimeManager(context: Context) {
     fun runtimeDirectory(): File = amethystRuntimeRoot
 
     private fun scanRuntimes(): List<DetectedJavaRuntime> {
+        migrateLegacyRuntimes()
         val entries = (listOf(amethystRuntimeRoot, privateRuntimeRoot, legacyRuntimeRoot)
             .flatMap { directory -> directory.listFiles()?.filter { it.isDirectory }.orEmpty() })
             .distinctBy { it.canonicalPath }
@@ -248,6 +249,21 @@ class JavaRuntimeManager(context: Context) {
             }
         }
         return allowed
+    }
+
+    private fun migrateLegacyRuntimes() {
+        val oldRoots = listOf(privateRuntimeRoot, legacyRuntimeRoot)
+        oldRoots.forEach { oldRoot ->
+            oldRoot.listFiles()?.filter { it.isDirectory }?.forEach { oldRuntime ->
+                val destination = File(amethystRuntimeRoot, oldRuntime.name)
+                if (!destination.exists() && File(oldRuntime, "release").isFile) {
+                    runCatching {
+                        if (!amethystRuntimeRoot.exists()) amethystRuntimeRoot.mkdirs()
+                        oldRuntime.copyRecursively(destination, overwrite = false)
+                    }
+                }
+            }
+        }
     }
 
     private fun parseRelease(file: File): Map<String, String> {
