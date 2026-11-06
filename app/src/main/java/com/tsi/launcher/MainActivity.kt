@@ -403,6 +403,7 @@ private fun TsiLauncherApp() {
                         versionId = selectedVersionId,
                         ramMb = ramMb.toInt(),
                         runtimePreference = javaRuntime,
+                        playerName = profileName,
                         onBackToDashboard = { section = MainSection.DASHBOARD }
                     )
                     MainSection.MOD_PACKS -> ModPackManagerScreen(
