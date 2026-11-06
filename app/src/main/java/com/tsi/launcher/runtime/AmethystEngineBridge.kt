@@ -55,9 +55,11 @@ object AmethystEngineBridge {
         "libexithook.so"
     )
 
-    fun isAvailable(context: Context): Boolean = missingComponents(context).isEmpty()
+    // Preflight must not require unpacked LWJGL files: prepare() extracts them
+    // after the user presses Start VM. Check APK-embedded engine assets here.
+    fun isAvailable(context: Context): Boolean = missingEmbeddedComponents(context).isEmpty()
 
-    fun missingComponents(context: Context): List<String> {
+    private fun missingEmbeddedComponents(context: Context): List<String> {
         val missing = mutableListOf<String>()
         requiredJavaClasses.forEach { className ->
             val available = runCatching {
@@ -73,13 +75,25 @@ object AmethystEngineBridge {
             }
         }
 
+        requiredLwjglFiles.forEach { relativePath ->
+            val assetPath = "components/$relativePath"
+            val bundled = runCatching {
+                context.assets.open(assetPath).use { it.read() }
+            }.isSuccess
+            if (!bundled) missing += "Bundled LWJGL component: $assetPath"
+        }
+        return missing
+    }
+
+    fun missingComponents(context: Context): List<String> {
+        val missing = missingEmbeddedComponents(context).toMutableList()
         val gameRoot = context.getExternalFilesDir(null)
         if (gameRoot == null) {
             missing += "Amethyst game storage is unavailable"
         } else {
             requiredLwjglFiles.forEach { relativePath ->
                 if (!File(gameRoot, relativePath).isFile) {
-                    missing += "LWJGL component: $relativePath"
+                    missing += "LWJGL component not extracted: $relativePath"
                 }
             }
         }
