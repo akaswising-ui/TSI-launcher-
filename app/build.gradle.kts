@@ -31,7 +31,8 @@ android {
 }
 
 dependencies {
-    // Compose 1.12 requires API 37 and AGP 9.1+. Keep this on Compose 1.9 for compileSdk 36 / AGP 8.13.2.\n    val composeBom = platform("androidx.compose:compose-bom:2025.08.00")
+    // Compose 1.12 requires API 37 and AGP 9.1+. This project uses Compose 1.9 with compileSdk 36 / AGP 8.13.2.
+    val composeBom = platform("androidx.compose:compose-bom:2025.08.00")
     implementation(composeBom)
 
     implementation("androidx.activity:activity-compose:1.10.1")
