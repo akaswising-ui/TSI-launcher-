@@ -1,0 +1,119 @@
+name: TSI Android Engine APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out TSI Launcher
+        uses: actions/checkout@v4
+
+      - name: Check out pinned Amethyst Android engine
+        uses: actions/checkout@v4
+        with:
+          repository: AngelAuraMC/Amethyst-Android
+          ref: 28d6e12d68121b7dd75f2e841058a6b7cdfe4a29
+          path: .build/Amethyst-Android
+          submodules: false
+
+      - name: Initialize Amethyst native submodules
+        working-directory: .build/Amethyst-Android
+        shell: bash
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android SDK manager was not found under $ANDROID_HOME"
+            exit 1
+          fi
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          LICENSE_STATUS=\${PIPESTATUS[1]}
+          set -o pipefail
+          if [ "$LICENSE_STATUS" -ne 0 ]; then
+            exit "$LICENSE_STATUS"
+          fi
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-37" \
+            "build-tools;37.0.0" \
+            "ndk;27.3.13750724"
+
+      - name: Set up Gradle 9.6.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.1"
+          validate-wrappers: false
+
+      - name: Integrate TSI Compose launcher with Amethyst engine
+        run: bash scripts/integrate-amethyst-engine.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.build/Amethyst-Android"
+
+      - name: Generate Amethyst language list
+        working-directory: .build/Amethyst-Android
+        run: bash scripts/languagelist_updater.sh
+
+      - name: Build engine-integrated TSI APK
+        working-directory: .build/Amethyst-Android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app_pojavlauncher:assembleDebug --no-daemon --stacktrace
+
+      - name: Stage TSI engine APK
+        shell: bash
+        run: |
+          mkdir -p out
+          APK=".build/Amethyst-Android/app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk"
+          test -s "$APK"
+          cp "$APK" out/TSI-Launcher-engine-debug.apk
+          sha256sum out/TSI-Launcher-engine-debug.apk > out/TSI-Launcher-engine-debug.apk.sha256
+
+      - name: Upload engine APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TSI-Launcher-engine-debug
+          path: |
+            out/TSI-Launcher-engine-debug.apk
+            out/TSI-Launcher-engine-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish direct APK download on GitHub Releases
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: \${{ github.token }}
+          APK_PATH: out/TSI-Launcher-engine-debug.apk
+          SHA_PATH: out/TSI-Launcher-engine-debug.apk.sha256
+          RELEASE_TAG: android-engine-debug-latest
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK_PATH" "$SHA_PATH" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$APK_PATH" "$SHA_PATH" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "TSI Launcher Android Engine Debug APK" \
+              --notes "TSI Launcher Compose UI integrated with the pinned Amethyst Android Java engine. Debug build for testing; Java engine and native renderer included." \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
