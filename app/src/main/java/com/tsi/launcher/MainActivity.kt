@@ -112,12 +112,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tsi.launcher.bedrock.BedrockIntegration
-import com.tsi.launcher.data.JavaClientInstaller
+import com.tsi.launcher.data.JavaGameInstaller
 import com.tsi.launcher.data.MinecraftVersion
 import com.tsi.launcher.data.VersionFilter
 import com.tsi.launcher.data.VersionManifestRepository
 import com.tsi.launcher.storage.VersionDirectoryManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val TsiInk = Color(0xFF183B4A)
 private val TsiTeal = Color(0xFF087F9C)
@@ -145,7 +147,7 @@ private fun TsiLauncherApp() {
     }
     val manifestRepository = remember { VersionManifestRepository() }
     val directoryManager = remember { VersionDirectoryManager(context.applicationContext) }
-    val clientInstaller = remember { JavaClientInstaller(directoryManager) }
+    val gameInstaller = remember { JavaGameInstaller(directoryManager) }
     val scope = rememberCoroutineScope()
 
     var section by rememberSaveable { mutableStateOf(MainSection.DASHBOARD) }
@@ -368,17 +370,20 @@ private fun TsiLauncherApp() {
                                 onDownload = { version ->
                                     scope.launch {
                                         activeDownload = version.id
-                                        statusMessage =
-                                            "Downloading ${version.id} client JAR and verifying SHA-1…"
+                                        statusMessage = "Preparing complete Java installation for ${version.id}…"
                                         try {
-                                            val result = clientInstaller.downloadClientJar(version)
-                                            val javaText = result.requiredJavaMajor?.toString() ?: "not specified"
+                                            val result = gameInstaller.install(version) { progress ->
+                                                withContext(Dispatchers.Main.immediate) {
+                                                    statusMessage = progress
+                                                }
+                                            }
+                                            val javaText = result.requiredJavaMajor?.toString() ?: "not resolved"
                                             statusMessage =
-                                                "${result.versionId} client JAR verified. Required Java: $javaText. Opening VM Controller for launch checks."
+                                                "${result.versionId} installed: ${result.libraryCount} libraries and ${result.assetCount} assets. Required Java: $javaText. Opening VM Controller."
                                             section = MainSection.VM_CONTROLLER
                                         } catch (error: Exception) {
                                             statusMessage =
-                                                "Download failed for ${version.id}: ${error.message ?: "unknown error"}"
+                                                "Install failed for ${version.id}: ${error.message ?: "unknown error"}"
                                         } finally {
                                             activeDownload = null
                                         }
