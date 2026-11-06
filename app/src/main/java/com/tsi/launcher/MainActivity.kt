@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
@@ -132,7 +134,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class MainSection { DASHBOARD, NEWS, SETTINGS }
+private enum class MainSection { DASHBOARD, MOD_PACKS, NEWS, SETTINGS }
 private enum class Edition { JAVA, BEDROCK }
 
 @Composable
@@ -301,6 +303,12 @@ private fun TsiLauncherApp() {
                         label = { Text("Dashboard") }
                     )
                     NavigationBarItem(
+                        selected = section == MainSection.MOD_PACKS,
+                        onClick = { section = MainSection.MOD_PACKS },
+                        icon = { Icon(Icons.Filled.Extension, contentDescription = null) },
+                        label = { Text("Mod Packs") }
+                    )
+                    NavigationBarItem(
                         selected = section == MainSection.NEWS,
                         onClick = { section = MainSection.NEWS },
                         icon = { Icon(Icons.Filled.Article, contentDescription = null) },
@@ -377,6 +385,12 @@ private fun TsiLauncherApp() {
                             )
                         }
                     }
+                    MainSection.MOD_PACKS -> ModPackManagerScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        profileName = profileName,
+                        searchQuery = searchQuery,
+                        onInstancesClick = { section = MainSection.DASHBOARD }
+                    )
                     MainSection.NEWS -> NewsScreen(Modifier.fillMaxSize())
                     MainSection.SETTINGS -> SettingsScreen(
                         modifier = Modifier.fillMaxSize(),
