@@ -5,6 +5,9 @@ import android.content.Intent
 import android.content.SharedPreferences
 import java.io.File
 import java.util.UUID
+import android.os.Build
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * TSI adapter for the Android-native Amethyst game engine.
@@ -74,6 +77,71 @@ object AmethystEngineBridge {
     }
 
     fun isAvailable(context: Context): Boolean = probe(context).available
+
+    /**
+     * Unpack Amethyst's bundled LWJGL 2/3 jars, Android native libraries,
+     * renderer helpers and support components before the game activity starts.
+     * Amethyst performs these copies on its own executor, so wait for the
+     * expected files instead of racing the JVM startup.
+     */
+    suspend fun prepare(
+        context: Context,
+        onProgress: suspend (String) -> Unit = {}
+    ) = withContext(Dispatchers.IO) {
+        val check = probe(context)
+        check(check.available) { check.details }
+
+        val toolsClass = Class.forName(TOOLS_CLASS)
+        val gameHome = File(toolsClass.getField("DIR_GAME_HOME").get(null) as String)
+        val privateData = File(toolsClass.getField("DIR_DATA").get(null) as String)
+        val asyncAssets = Class.forName("net.kdt.pojavlaunch.tasks.AsyncAssetManager")
+
+        onProgress("Preparing Amethyst runtime components…")
+        asyncAssets.getMethod("unpackSingleFiles", Context::class.java).invoke(null, context)
+        asyncAssets.getMethod("unpackComponents", Context::class.java).invoke(null, context)
+
+        val abi = when {
+            Build.SUPPORTED_ABIS.any { it.contains("arm64") } -> "arm64-v8a"
+            Build.SUPPORTED_ABIS.any { it == "armeabi-v7a" || it == "armeabi" } -> "armeabi-v7a"
+            Build.SUPPORTED_ABIS.any { it.contains("x86_64") } -> "x86_64"
+            Build.SUPPORTED_ABIS.any { it == "x86" } -> "x86"
+            else -> throw IllegalStateException("No Amethyst LWJGL native bundle for this Android ABI.")
+        }
+
+        val expectedFiles = listOf(
+            File(gameHome, "caciocavallo/version"),
+            File(gameHome, "caciocavallo17/version"),
+            File(gameHome, "lwjgl3/3.3.3/lwjgl.jar"),
+            File(gameHome, "lwjgl3/3.3.3/lwjgl-3.3.3-merged-modules.jar"),
+            File(gameHome, "lwjgl3/3.3.3/lwjgl-lwjglx.jar"),
+            File(gameHome, "lwjgl3/3.4.1/lwjgl.jar"),
+            File(gameHome, "lwjgl3/3.4.1/lwjgl-3.4.1-merged-modules.jar"),
+            File(gameHome, "lwjgl3/3.4.1/lwjgl-lwjglx.jar"),
+            File(privateData, "MioLibPatcher/MioLibPatcher.jar"),
+            File(privateData, "security/version")
+        )
+        val nativeDirectories = listOf(
+            File(privateData, "lwjgl-3.3.3-natives/$abi"),
+            File(privateData, "lwjgl-3.4.1-natives/$abi")
+        )
+
+        val deadline = System.currentTimeMillis() + 120_000L
+        while (true) {
+            val filesReady = expectedFiles.all { it.isFile && it.length() > 0L }
+            val nativesReady = nativeDirectories.all { it.isDirectory && it.listFiles()?.isNotEmpty() == true }
+            if (filesReady && nativesReady) break
+
+            if (System.currentTimeMillis() >= deadline) {
+                val missing = (expectedFiles.filterNot { it.isFile && it.length() > 0L } +
+                    nativeDirectories.filterNot { it.isDirectory && it.listFiles()?.isNotEmpty() == true })
+                    .joinToString { it.absolutePath }
+                throw IllegalStateException("Amethyst component extraction did not finish. Missing: $missing")
+            }
+            onProgress("Extracting LWJGL, renderer and Android native components…")
+            Thread.sleep(350L)
+        }
+        onProgress("Amethyst engine components are ready.")
+    }
 
     fun launch(
         context: Context,
