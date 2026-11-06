@@ -79,6 +79,7 @@ class JavaRuntimeManager(context: Context) {
                 if (libraries != null) {
                     for (index in 0 until libraries.length()) {
                         val library = libraries.optJSONObject(index) ?: continue
+                        if (!libraryAllowed(library)) continue
                         val downloads = library.optJSONObject("downloads") ?: continue
                         val artifact = downloads.optJSONObject("artifact") ?: continue
                         val relativePath = artifact.optString("path")
@@ -193,6 +194,44 @@ class JavaRuntimeManager(context: Context) {
                 )
             }
         }.sortedBy { it.majorVersion }
+    }
+
+    private fun libraryAllowed(library: JSONObject): Boolean {
+        val rules = library.optJSONArray("rules") ?: return true
+        var allowed = false
+        val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+        val architecture = if (abi.contains("64")) "x86_64" else "x86"
+
+        for (index in 0 until rules.length()) {
+            val rule = rules.optJSONObject(index) ?: continue
+            val os = rule.optJSONObject("os")
+            val osMatches = if (os == null) true else {
+                val nameMatches = os.optString("name").let { it.isBlank() || it == "linux" }
+                val archPattern = os.optString("arch")
+                val archMatches = archPattern.isBlank() || runCatching {
+                    Regex(archPattern).containsMatchIn(architecture)
+                }.getOrDefault(false)
+                val versionPattern = os.optString("version")
+                val versionMatches = versionPattern.isBlank() || runCatching {
+                    Regex(versionPattern).containsMatchIn(System.getProperty("os.version").orEmpty())
+                }.getOrDefault(false)
+                nameMatches && archMatches && versionMatches
+            }
+            val features = rule.optJSONObject("features")
+            val featuresMatch = if (features == null) true else {
+                val keys = features.keys()
+                var matches = true
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    if (features.optBoolean(key, false)) matches = false
+                }
+                matches
+            }
+            if (osMatches && featuresMatch) {
+                allowed = rule.optString("action") == "allow"
+            }
+        }
+        return allowed
     }
 
     private fun parseRelease(file: File): Map<String, String> {
