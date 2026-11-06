@@ -49,7 +49,7 @@ jobs:
           fi
           set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
-          LICENSE_STATUS=\${PIPESTATUS[1]}
+          LICENSE_STATUS=${PIPESTATUS[1]}
           set -o pipefail
           if [ "$LICENSE_STATUS" -ne 0 ]; then
             exit "$LICENSE_STATUS"
@@ -101,7 +101,7 @@ jobs:
       - name: Publish direct APK download on GitHub Releases
         if: github.event_name != 'pull_request'
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
           APK_PATH: out/TSI-Launcher-engine-debug.apk
           SHA_PATH: out/TSI-Launcher-engine-debug.apk.sha256
           RELEASE_TAG: android-engine-debug-latest
