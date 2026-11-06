@@ -204,7 +204,13 @@ class JavaRuntimeManager(context: Context) {
         val rules = library.optJSONArray("rules") ?: return true
         var allowed = false
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
-        val architecture = if (abi.contains("64")) "x86_64" else "x86"
+        val architecture = when {
+            abi.contains("arm64") || abi.contains("aarch64") -> "aarch64"
+            abi.contains("armeabi") || abi == "arm" -> "arm"
+            abi.contains("x86_64") || abi.contains("amd64") -> "x86_64"
+            abi == "x86" || abi.contains("i386") || abi.contains("i686") -> "x86"
+            else -> "unsupported"
+        }
 
         for (index in 0 until rules.length()) {
             val rule = rules.optJSONObject(index) ?: continue
