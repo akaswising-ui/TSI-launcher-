@@ -43,7 +43,7 @@ data class VersionVmInspection(
  * A detected JRE is not by itself an Android Minecraft engine. The JNI/JVM,
  * LWJGL, renderer, surface and input bridge must also be linked.
  */
-class JavaRuntimeManager(context: Context) {
+class JavaRuntimeManager(private val context: Context) {
     private val root = File(
         context.getExternalFilesDir(null) ?: context.filesDir,
         ".minecraft"
