@@ -168,7 +168,15 @@ class JavaRuntimeManager(context: Context) {
 
                 val jvmCandidates = listOf(
                     File(home, "lib/server/libjvm.so"),
-                    File(home, "lib/client/libjvm.so")
+                    File(home, "lib/client/libjvm.so"),
+                    File(home, "lib/amd64/server/libjvm.so"),
+                    File(home, "lib/amd64/client/libjvm.so"),
+                    File(home, "lib/aarch64/server/libjvm.so"),
+                    File(home, "lib/aarch64/client/libjvm.so"),
+                    File(home, "lib/arm/server/libjvm.so"),
+                    File(home, "lib/arm/client/libjvm.so"),
+                    File(home, "lib/x86_64/server/libjvm.so"),
+                    File(home, "lib/x86/server/libjvm.so")
                 )
                 val jvm = jvmCandidates.firstOrNull { it.isFile }
                     ?: return@firstNotNullOfOrNull null
