@@ -241,19 +241,27 @@ object AmethystEngineBridge {
 
         // Match AndroidX PreferenceManager's default preference file name without
         // forcing the standalone TSI APK to depend on androidx.preference.
-        context.getSharedPreferences(
+        val runtimePreferencesSaved = context.getSharedPreferences(
             context.packageName + "_preferences",
             Context.MODE_PRIVATE
         ).edit()
             .putString("currentProfile", profileKey)
             .putString("defaultRuntime", runtimeName)
             .putInt("allocation", heapMb)
-            .apply()
+            .commit()
+        if (!runtimePreferencesSaved) {
+            throw IOException("Could not persist Amethyst's selected runtime and profile preferences.")
+        }
 
-        context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
+        // MainActivity runs in Amethyst's separate :game process. Commit this value
+        // before starting it so PojavProfile can read the selected account on disk.
+        val accountSelectionSaved = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(PROFILE_PREF_FILE, playerName)
-            .apply()
+            .commit()
+        if (!accountSelectionSaved) {
+            throw IOException("Could not persist Amethyst's selected local player account.")
+        }
     }
 
     private fun writeAtomically(destination: File, content: String) {
