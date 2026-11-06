@@ -213,7 +213,7 @@ fun VirtualMachineControllerScreen(
                 val neededJava = inspection?.requiredJavaMajor
                 val isNeededRuntimeInstalled = neededJava != null &&
                     runtimes.any { it.majorVersion == neededJava }
-                if (neededJava in listOf(8, 17, 21, 25) && !isNeededRuntimeInstalled) {
+                if (neededJava != null && neededJava in listOf(8, 17, 21, 25) && !isNeededRuntimeInstalled) {
                     Button(
                         onClick = {
                             scope.launch {
