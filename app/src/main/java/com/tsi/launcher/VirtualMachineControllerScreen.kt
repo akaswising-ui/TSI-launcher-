@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tsi.launcher.runtime.AmethystEngineBridge
 import com.tsi.launcher.runtime.AndroidJreInstaller
 import com.tsi.launcher.runtime.JavaRuntimeManager
 import com.tsi.launcher.runtime.VersionVmInspection
@@ -66,6 +67,7 @@ fun VirtualMachineControllerScreen(
     versionId: String,
     ramMb: Int,
     runtimePreference: String,
+    playerName: String,
     onBackToDashboard: () -> Unit
 ) {
     val context = LocalContext.current
@@ -298,7 +300,26 @@ fun VirtualMachineControllerScreen(
         }
 
         Button(
-            onClick = { controllerMessage = "Launch blocked by preflight. Resolve every missing requirement first." },
+            onClick = {
+                val ready = inspection
+                val runtime = ready?.compatibleRuntime
+                if (ready == null || !ready.readyToLaunch || runtime == null) {
+                    controllerMessage = "Launch blocked by preflight. Resolve every missing requirement first."
+                } else {
+                    try {
+                        AmethystEngineBridge.launch(
+                            context = context,
+                            versionId = versionId,
+                            heapMb = ramMb,
+                            runtime = runtime,
+                            playerName = playerName
+                        )
+                        controllerMessage = "Amethyst engine activity started for Minecraft $versionId."
+                    } catch (error: Exception) {
+                        controllerMessage = "Engine launch failed: ${error.cause?.message ?: error.message ?: "unknown error"}"
+                    }
+                }
+            },
             enabled = inspection?.readyToLaunch == true && !scanning,
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(15.dp),
@@ -313,7 +334,7 @@ fun VirtualMachineControllerScreen(
         }
 
         OutlinedButton(
-            onClick = { controllerMessage = "VM is already stopped." },
+            onClick = { controllerMessage = "Use the in-game Exit control to stop Minecraft and return to TSI." },
             enabled = false,
             modifier = Modifier.fillMaxWidth()
         ) {
