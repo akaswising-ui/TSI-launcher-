@@ -196,7 +196,13 @@ class JavaGameInstaller(
         val rules = library.optJSONArray("rules") ?: return true
         var allowed = false
         val deviceArch = Build.SUPPORTED_ABIS.firstOrNull().orEmpty().lowercase(Locale.ROOT)
-        val architecture = if (deviceArch.contains("64")) "x86_64" else "x86"
+        val architecture = when {
+            deviceArch.contains("arm64") || deviceArch.contains("aarch64") -> "aarch64"
+            deviceArch.contains("armeabi") || deviceArch == "arm" -> "arm"
+            deviceArch.contains("x86_64") || deviceArch.contains("amd64") -> "x86_64"
+            deviceArch == "x86" || deviceArch.contains("i386") || deviceArch.contains("i686") -> "x86"
+            else -> "unsupported"
+        }
 
         for (index in 0 until rules.length()) {
             val rule = rules.optJSONObject(index) ?: continue
