@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TSI_ROOT="$(cd "\${1:-.}" && pwd)"
-AMETHYST_ROOT="$(cd "\${2:-.build/Amethyst-Android}" && pwd)"
+TSI_ROOT="$(cd "${1:-.}" && pwd)"
+AMETHYST_ROOT="$(cd "${2:-.build/Amethyst-Android}" && pwd)"
 APP_ROOT="$AMETHYST_ROOT/app_pojavlauncher"
 TSI_JAVA_ROOT="$TSI_ROOT/app/src/main/java/com/tsi/launcher"
 
