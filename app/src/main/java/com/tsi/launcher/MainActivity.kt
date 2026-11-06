@@ -807,7 +807,7 @@ private fun FeaturedVersionCard(
                         )
                         Spacer(Modifier.width(7.dp))
                         Text(
-                            if (isDownloading) "DOWNLOADING…" else "DOWNLOAD CLIENT",
+                            if (isDownloading) "INSTALLING…" else "INSTALL & PREPARE",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )
