@@ -1,0 +1,3 @@
+[submodule "amethyst-android"]
+	path = vendor/amethyst-android
+	url = https://github.com/AngelAuraMC/Amethyst-Android.git
