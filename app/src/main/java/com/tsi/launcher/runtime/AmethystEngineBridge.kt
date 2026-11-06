@@ -124,10 +124,9 @@ object AmethystEngineBridge {
             heapMb = heapMb.toInt().coerceIn(512, 16384)
         )
 
-        val launchIntent = Intent(
-            context,
-            net.kdt.pojavlaunch.MainActivity::class.java
-        ).putExtra("intent_version", safeVersion)
+        val launchIntent = Intent()
+            .setClassName(context, LAUNCHER_ACTIVITY)
+            .putExtra("intent_version", safeVersion)
 
         if (context !is Activity) {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
