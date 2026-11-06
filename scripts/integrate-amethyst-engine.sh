@@ -42,7 +42,7 @@ text = app_gradle.read_text()
 text = replace_once(
     text,
     "    compileSdk = 37",
-    "    compileSdk {\\n        version = release(36) {\\n            minorApiLevel = 1\\n        }\\n    }",
+    "    compileSdk {\n        version = release(36) {\n            minorApiLevel = 1\n        }\n    }",
     "Amethyst Android SDK platform compatibility",
 )
 text = replace_once(
