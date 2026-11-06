@@ -32,8 +32,13 @@ data class RuntimePackage(
  * remains a separate integration requirement.
  */
 class AndroidJreInstaller(context: Context) {
-    private val root = VersionDirectoryManager(context.applicationContext).root()
-    private val runtimeRoot = File(root, "runtimes")
+    private val gameRoot = VersionDirectoryManager(context.applicationContext).root()
+
+    // Android app-private storage supports executable/runtime files and native
+    // library loading. External app-specific storage is intended for game data,
+    // not the extracted JVM runtime.
+    private val runtimeRoot = File(context.noBackupFilesDir, "tsi/.minecraft/runtimes")
+    private val legacyRuntimeRoot = File(gameRoot, "runtimes")
 
     fun supportedRuntimeMajors(): List<Int> = listOf(8, 17, 21, 25)
 
@@ -48,16 +53,22 @@ class AndroidJreInstaller(context: Context) {
         }
     }
 
-    fun isInstalled(javaMajor: Int): Boolean {
-        val directory = File(runtimeRoot, "External-$javaMajor")
-        val release = File(directory, "release")
-        if (!release.isFile) return false
-        val properties = parseRelease(release)
-        val version = properties["JAVA_VERSION"].orEmpty().trim('"')
-        val arch = properties["OS_ARCH"].orEmpty().trim('"')
-        return parseJavaMajor(version) == javaMajor &&
-            isDeviceCompatible(arch) &&
-            findJvmLibrary(directory) != null
+    fun isInstalled(javaMajor: Int): Boolean = findInstalledRuntime(javaMajor) != null
+
+    private fun findInstalledRuntime(javaMajor: Int): File? {
+        return listOf(runtimeRoot, legacyRuntimeRoot)
+            .asSequence()
+            .map { File(it, "External-$javaMajor") }
+            .firstOrNull { directory ->
+                val release = File(directory, "release")
+                if (!release.isFile) return@firstOrNull false
+                val properties = parseRelease(release)
+                val version = properties["JAVA_VERSION"].orEmpty().trim('"')
+                val arch = properties["OS_ARCH"].orEmpty().trim('"')
+                parseJavaMajor(version) == javaMajor &&
+                    isDeviceCompatible(arch) &&
+                    findJvmLibrary(directory) != null
+            }
     }
 
     suspend fun downloadAndInstall(
@@ -69,8 +80,8 @@ class AndroidJreInstaller(context: Context) {
         val pkg = packageFor(javaMajor, arch)
             ?: throw IOException("Java $javaMajor is not available for Android architecture $arch.")
 
-        if (isInstalled(javaMajor)) {
-            return@withContext File(runtimeRoot, "External-$javaMajor")
+        findInstalledRuntime(javaMajor)?.let { installed ->
+            return@withContext installed
         }
 
         ensureDirectory(runtimeRoot)
