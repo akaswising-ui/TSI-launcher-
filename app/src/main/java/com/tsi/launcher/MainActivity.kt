@@ -367,6 +367,7 @@ private fun TsiLauncherApp() {
                                     profileDialogOpen = true
                                 },
                                 activeDownload = activeDownload,
+                                onOpenVmController = { section = MainSection.VM_CONTROLLER },
                                 onDownload = { version ->
                                     scope.launch {
                                         activeDownload = version.id
@@ -515,6 +516,7 @@ private fun JavaDashboard(
     profileName: String,
     onAddProfile: () -> Unit,
     activeDownload: String?,
+    onOpenVmController: () -> Unit,
     onDownload: (MinecraftVersion) -> Unit
 ) {
     BoxWithConstraints(
@@ -559,6 +561,7 @@ private fun JavaDashboard(
                             selectedVersion = selectedVersion,
                             latestRelease = latestRelease,
                             activeDownload = activeDownload,
+                            onOpenVmController = onOpenVmController,
                             onDownload = { selectedVersion?.let(onDownload) }
                         )
                         VersionCategoryCards(
@@ -583,6 +586,7 @@ private fun JavaDashboard(
                     selectedVersion = selectedVersion,
                     latestRelease = latestRelease,
                     activeDownload = activeDownload,
+                    onOpenVmController = onOpenVmController,
                     onDownload = { selectedVersion?.let(onDownload) }
                 )
                 VersionCategoryCards(
@@ -709,6 +713,7 @@ private fun FeaturedVersionCard(
     selectedVersion: MinecraftVersion?,
     latestRelease: MinecraftVersion?,
     activeDownload: String?,
+    onOpenVmController: () -> Unit,
     onDownload: () -> Unit
 ) {
     val versionName = selectedVersion?.id ?: latestRelease?.id ?: "Loading…"
@@ -831,8 +836,17 @@ private fun FeaturedVersionCard(
                         }
                     }
                 }
+                OutlinedButton(
+                    onClick = onOpenVmController,
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Filled.Memory, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("OPEN VIRTUAL MACHINE CONTROLLER", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
                 Text(
-                    "Client download is ready. Full Android JVM launch support is still being integrated.",
+                    "Downloads open the VM Controller automatically. The Android JVM/LWJGL game engine still needs integration before Java games can start.",
                     color = TsiMuted,
                     fontSize = 11.sp
                 )
