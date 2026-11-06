@@ -108,7 +108,6 @@ compose_dependencies = (
     '    implementation "androidx.compose.foundation:foundation"\n'
     '    implementation "androidx.compose.material3:material3"\n'
     '    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"\n'
-    '    implementation "org.apache.commons:commons-compress:1.28.0"\n'
     '    implementation "org.tukaani:xz:1.10"\n'
     '    debugImplementation "androidx.compose.ui:ui-tooling"'
 )

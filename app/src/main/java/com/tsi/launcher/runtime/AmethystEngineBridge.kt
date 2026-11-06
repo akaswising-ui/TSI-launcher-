@@ -8,6 +8,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
+import android.os.SystemClock
+import kotlinx.coroutines.delay
 
 /**
  * Adapter from TSI's installed game/runtime layout to Amethyst's Android game host.
@@ -28,8 +30,22 @@ object AmethystEngineBridge {
         LAUNCHER_ACTIVITY,
         "org.libsdl.app.SDL",
         "org.lwjgl.glfw.CallbackBridge",
-        "org.lwjgl.opengl.GL",
-        "org.lwjgl.openal.AL10"
+        "net.kdt.pojavlaunch.AWTInputBridge",
+        "net.kdt.pojavlaunch.EfficientAndroidLWJGLKeycode",
+        "net.kdt.pojavlaunch.customcontrols.keyboard.TouchCharInput"
+    )
+
+    // LWJGL runs inside the selected Minecraft JRE, so its OpenGL/OpenAL
+    // Java classes are checked as extracted component JARs, not APK Dex classes.
+    private val requiredLwjglFiles = listOf(
+        "lwjgl3/3.3.3/lwjgl.jar",
+        "lwjgl3/3.3.3/lwjgl-3.3.3-merged-modules.jar",
+        "lwjgl3/3.3.3/lwjgl-lwjglx.jar",
+        "lwjgl3/3.3.3/lwjgl-openal.jar",
+        "lwjgl3/3.4.1/lwjgl.jar",
+        "lwjgl3/3.4.1/lwjgl-3.4.1-merged-modules.jar",
+        "lwjgl3/3.4.1/lwjgl-lwjglx.jar",
+        "lwjgl3/3.4.1/lwjgl-openal.jar"
     )
 
     // These are loaded by Amethyst's own JVM startup path (JREUtils).
@@ -56,6 +72,17 @@ object AmethystEngineBridge {
                 missing += "Amethyst native library: $library"
             }
         }
+
+        val gameRoot = context.getExternalFilesDir(null)
+        if (gameRoot == null) {
+            missing += "Amethyst game storage is unavailable"
+        } else {
+            requiredLwjglFiles.forEach { relativePath ->
+                if (!File(gameRoot, relativePath).isFile) {
+                    missing += "LWJGL component: $relativePath"
+                }
+            }
+        }
         return missing
     }
 
@@ -63,14 +90,25 @@ object AmethystEngineBridge {
         context: Context,
         progress: suspend (String) -> Unit
     ) {
-        progress("Checking the embedded Amethyst JVM and native launcher…")
+        progress("Preparing Amethyst SDL, LWJGL, graphics, audio and input components…")
+        val assetManager = Class.forName("net.kdt.pojavlaunch.tasks.AsyncAssetManager")
+        assetManager.getMethod("unpackComponents", Context::class.java).invoke(null, context)
+
+        val gameRoot = context.getExternalFilesDir(null)
+            ?: throw IOException("Amethyst external app storage is unavailable.")
+        val expectedLwjgl = requiredLwjglFiles.map { File(gameRoot, it) }
+        val deadline = SystemClock.elapsedRealtime() + 90_000L
+        while (expectedLwjgl.any { !it.isFile } && SystemClock.elapsedRealtime() < deadline) {
+            delay(300)
+        }
+
         val missing = missingComponents(context)
         if (missing.isNotEmpty()) {
             throw IllegalStateException(
                 "The Amethyst engine bundle is incomplete: " + missing.joinToString()
             )
         }
-        progress("Amethyst JVM, SDL, LWJGL, OpenGL and OpenAL classes are present.")
+        progress("Amethyst JVM host, SDL, LWJGL OpenGL/OpenAL JARs, renderer and input components are ready.")
     }
 
     fun launch(

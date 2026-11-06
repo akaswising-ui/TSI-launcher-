@@ -147,7 +147,7 @@ private fun TsiLauncherApp() {
     }
     val manifestRepository = remember { VersionManifestRepository() }
     val directoryManager = remember { VersionDirectoryManager(context.applicationContext) }
-    val gameInstaller = remember { JavaGameInstaller(directoryManager) }
+    val gameInstaller = remember { JavaGameInstaller(context.applicationContext, directoryManager) }
     val scope = rememberCoroutineScope()
 
     var section by rememberSaveable { mutableStateOf(MainSection.DASHBOARD) }

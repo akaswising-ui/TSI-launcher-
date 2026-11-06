@@ -1,5 +1,6 @@
 package com.tsi.launcher.data
 
+import android.content.Context
 import android.os.Build
 import com.tsi.launcher.storage.VersionDirectoryManager
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,7 @@ data class JavaGameInstallResult(
  * integration and are deliberately not treated as ordinary desktop natives.
  */
 class JavaGameInstaller(
+    private val context: Context,
     private val directoryManager: VersionDirectoryManager
 ) {
     suspend fun install(
@@ -85,6 +87,29 @@ class JavaGameInstaller(
 
                 val downloads = library.optJSONObject("downloads")
                 val artifact = downloads?.optJSONObject("artifact")
+
+                // Amethyst uses an Android JNA AAR. Keep the existing TSI library
+                // installer as the single download path, then use Amethyst's own
+                // native extractor when the engine is embedded in this APK.
+                if (library.optString("name").startsWith("net.java.dev.jna:jna:") &&
+                    runCatching {
+                        Class.forName("net.kdt.pojavlaunch.tasks.NativesExtractor")
+                    }.isSuccess
+                ) {
+                    val aarPath = jnaNativeArchivePath(library, artifact)
+                    val aarTarget = safeChild(paths.sharedLibrariesDirectory, aarPath)
+                    if (!aarTarget.isFile) {
+                        progress("Downloading Android JNA native library…")
+                        downloadVerified(
+                            "https://repo1.maven.org/maven2/$aarPath",
+                            aarTarget,
+                            expectedSha1 = null,
+                            expectedSize = -1L
+                        )
+                    }
+                    extractAmethystNativeArchive(version.id, aarTarget)
+                }
+
                 if (artifact == null) {
                     // Classifier-only native libraries are intentionally not copied:
                     // desktop native binaries are not Android-compatible LWJGL natives.
@@ -190,6 +215,43 @@ class JavaGameInstaller(
             requiredJavaMajor = requiredJava,
             assetIndexId = assetIndexId
         )
+    }
+
+    private fun jnaNativeArchivePath(library: JSONObject, artifact: JSONObject?): String {
+        val artifactPath = artifact?.optString("path").orEmpty()
+        if (artifactPath.isNotBlank()) {
+            val withoutExtension = artifactPath.substringBeforeLast('.', artifactPath)
+            return "$withoutExtension.aar"
+        }
+
+        val coordinates = library.optString("name").split(':')
+        require(coordinates.size >= 3) { "Invalid JNA Maven coordinates" }
+        val groupPath = coordinates[0].replace('.', '/')
+        val artifactName = coordinates[1]
+        val versionName = coordinates[2]
+        val classifier = coordinates.getOrNull(3)?.takeIf { it.isNotBlank() }?.let { "-$it" }.orEmpty()
+        return "$groupPath/$artifactName/$versionName/$artifactName-$versionName$classifier.aar"
+    }
+
+    private fun extractAmethystNativeArchive(versionId: String, archive: File) {
+        try {
+            val extractorClass = Class.forName("net.kdt.pojavlaunch.tasks.NativesExtractor")
+            val destination = File(context.cacheDir, "natives/$versionId")
+            ensureDirectory(destination)
+            val extractor = extractorClass
+                .getConstructor(File::class.java)
+                .newInstance(destination)
+            extractorClass
+                .getMethod("extractFromAar", File::class.java)
+                .invoke(extractor, archive)
+        } catch (error: java.lang.reflect.InvocationTargetException) {
+            throw IOException(
+                "Amethyst could not extract Android JNA native files.",
+                error.targetException ?: error
+            )
+        } catch (error: Exception) {
+            throw IOException("Amethyst Android native extractor is unavailable.", error)
+        }
     }
 
     private fun libraryAllowed(library: JSONObject): Boolean {
