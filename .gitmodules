@@ -1,3 +1,4 @@
-[submodule "amethyst-android"]
-	path = vendor/amethyst-android
+[submodule "engine/Amethyst-Android"]
+	path = engine/Amethyst-Android
 	url = https://github.com/AngelAuraMC/Amethyst-Android.git
+	branch = v3_openjdk
