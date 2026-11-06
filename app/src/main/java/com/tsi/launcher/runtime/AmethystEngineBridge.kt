@@ -3,7 +3,6 @@ package com.tsi.launcher.runtime
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import androidx.preference.PreferenceManager
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -92,7 +91,8 @@ object AmethystEngineBridge {
             "The selected Android JRE is incomplete."
         }
 
-        val externalRoot = context.getExternalFilesDir(null) ?: context.filesDir
+        val externalRoot = context.getExternalFilesDir(null)
+            ?: throw IOException("Amethyst external app storage is unavailable.")
         val minecraftRoot = File(externalRoot, ".minecraft")
         val versionDirectory = File(File(minecraftRoot, "versions"), safeVersion)
         require(File(versionDirectory, "$safeVersion.json").isFile) {
@@ -176,15 +176,23 @@ object AmethystEngineBridge {
             throw IOException("Could not create Amethyst's local account directory.")
         }
         val accountFile = File(accountsDirectory, "$playerName.json")
-        val account = JSONObject()
-            .put("accessToken", "0")
-            .put("clientToken", "0")
-            .put("profileId", "00000000-0000-0000-0000-000000000000")
-            .put("username", playerName)
-            .put("isMicrosoft", false)
-        writeAtomically(accountFile, account.toString(2))
+        // Preserve an existing Amethyst account file, including any valid sign-in tokens.
+        if (!accountFile.isFile) {
+            val account = JSONObject()
+                .put("accessToken", "0")
+                .put("clientToken", "0")
+                .put("profileId", "00000000-0000-0000-0000-000000000000")
+                .put("username", playerName)
+                .put("isMicrosoft", false)
+            writeAtomically(accountFile, account.toString(2))
+        }
 
-        PreferenceManager.getDefaultSharedPreferences(context).edit()
+        // Match AndroidX PreferenceManager's default preference file name without
+        // forcing the standalone TSI APK to depend on androidx.preference.
+        context.getSharedPreferences(
+            context.packageName + "_preferences",
+            Context.MODE_PRIVATE
+        ).edit()
             .putString("currentProfile", profileKey)
             .putString("defaultRuntime", runtimeName)
             .putInt("allocation", heapMb)

@@ -33,7 +33,6 @@ text = replace_once(
     text,
     "    id 'com.android.library' version '9.3.1' apply false",
     "    id 'com.android.library' version '9.3.1' apply false\n"
-    "    id 'org.jetbrains.kotlin.android' version '2.2.21' apply false\n"
     "    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.21' apply false",
     "root Kotlin plugin insertion",
 )
@@ -51,7 +50,6 @@ text = replace_once(
     "plugins {\n    id 'com.android.application' version '9.3.1'\n}",
     "plugins {\n"
     "    id 'com.android.application' version '9.3.1'\n"
-    "    id 'org.jetbrains.kotlin.android'\n"
     "    id 'org.jetbrains.kotlin.plugin.compose'\n"
     "}",
     "Amethyst app plugin block",
@@ -71,8 +69,7 @@ text = replace_once(
 text = replace_once(
     text,
     "    buildFeatures {\n        prefab true\n        buildConfig true\n    }",
-    "    buildFeatures {\n        prefab true\n        buildConfig true\n        compose true\n    }\n\n"
-    "    kotlinOptions {\n        jvmTarget = '1.8'\n    }",
+    "    buildFeatures {\n        prefab true\n        buildConfig true\n        compose true\n    }",
     "Amethyst Compose build features",
 )
 

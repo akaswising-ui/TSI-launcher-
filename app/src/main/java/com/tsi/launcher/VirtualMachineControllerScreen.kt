@@ -320,7 +320,7 @@ fun VirtualMachineControllerScreen(
                                 AmethystEngineBridge.launch(
                                     context = context,
                                     versionId = versionId,
-                                    heapMb = ramMb,
+                                    heapMb = ramMb.toFloat(),
                                     runtime = runtime,
                                     playerName = playerName
                                 )
