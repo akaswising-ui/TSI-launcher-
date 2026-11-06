@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -47,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tsi.launcher.runtime.AndroidJreInstaller
 import com.tsi.launcher.runtime.JavaRuntimeManager
 import com.tsi.launcher.runtime.VersionVmInspection
 import kotlinx.coroutines.Dispatchers
@@ -68,9 +70,12 @@ fun VirtualMachineControllerScreen(
 ) {
     val context = LocalContext.current
     val manager = remember { JavaRuntimeManager(context.applicationContext) }
+    val jreInstaller = remember { AndroidJreInstaller(context.applicationContext) }
     val scope = rememberCoroutineScope()
     var inspection by remember { mutableStateOf<VersionVmInspection?>(null) }
     var scanning by remember { mutableStateOf(false) }
+    var installingRuntime by remember { mutableStateOf(false) }
+    var runtimeInstallMessage by remember { mutableStateOf("") }
     var controllerMessage by remember {
         mutableStateOf("VM is stopped. Inspecting selected Minecraft installation…")
     }
@@ -182,7 +187,7 @@ fun VirtualMachineControllerScreen(
                 if (runtimes.isEmpty()) {
                     Text("No compatible Android JRE detected.", color = VmAmber, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Expected layout: .minecraft/runtimes/<name>/release and lib/server/libjvm.so. A desktop Java install is not an Android JVM.",
+                        "TSI checks Android OpenJDK runtimes under .minecraft/runtimes. A desktop Java install is not an Android JVM.",
                         color = VmMuted,
                         fontSize = 11.sp
                     )
@@ -203,6 +208,46 @@ fun VirtualMachineControllerScreen(
                             Text("DETECTED", color = VmGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+                }
+
+                val neededJava = inspection?.requiredJavaMajor
+                val isNeededRuntimeInstalled = neededJava != null &&
+                    runtimes.any { it.majorVersion == neededJava }
+                if (neededJava in listOf(8, 17, 21, 25) && !isNeededRuntimeInstalled) {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                installingRuntime = true
+                                runtimeInstallMessage = "Preparing Java $neededJava download…"
+                                try {
+                                    jreInstaller.downloadAndInstall(neededJava) { update ->
+                                        withContext(Dispatchers.Main.immediate) {
+                                            runtimeInstallMessage = update
+                                        }
+                                    }
+                                    inspection = withContext(Dispatchers.IO) {
+                                        manager.inspect(versionId, runtimePreference)
+                                    }
+                                    runtimeInstallMessage = "Java $neededJava installed. Refresh the checklist."
+                                } catch (error: Exception) {
+                                    runtimeInstallMessage = "Runtime install failed: ${error.message ?: "unknown error"}"
+                                } finally {
+                                    installingRuntime = false
+                                }
+                            }
+                        },
+                        enabled = !installingRuntime,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = VmGreen)
+                    ) {
+                        Icon(Icons.Filled.Download, null)
+                        Spacer(Modifier.width(7.dp))
+                        Text(if (installingRuntime) "INSTALLING JAVA $neededJava…" else "DOWNLOAD & INSTALL JAVA $neededJava")
+                    }
+                }
+
+                AnimatedVisibility(visible = runtimeInstallMessage.isNotBlank()) {
+                    Text(runtimeInstallMessage, color = VmMuted, fontSize = 11.sp)
                 }
             }
         }
