@@ -288,12 +288,12 @@ class JavaGameInstaller(
             }
 
             if (expectedSize >= 0 && bytes != expectedSize) {
-                throw IOException("File size verification failed for $target.name")
+                throw IOException("File size verification failed for ${target.name}")
             }
             if (expectedSha1 != null) {
                 val actual = digest.digest().toHex()
                 if (!actual.equals(expectedSha1, ignoreCase = true)) {
-                    throw IOException("SHA-1 verification failed for $target.name")
+                    throw IOException("SHA-1 verification failed for ${target.name}")
                 }
             }
             replaceAtomically(temporary, target)
@@ -374,15 +374,15 @@ class JavaGameInstaller(
     }
 
     private fun replaceAtomically(source: File, target: File) {
-        if (target.exists() && !target.delete()) throw IOException("Cannot replace $target.name")
-        if (!source.renameTo(target)) throw IOException("Cannot finalize $target.name")
+        if (target.exists() && !target.delete()) throw IOException("Cannot replace ${target.name}")
+        if (!source.renameTo(target)) throw IOException("Cannot finalize ${target.name}")
     }
 
     private fun ensureDirectory(directory: File) {
         if (!directory.exists() && !directory.mkdirs()) {
-            throw IOException("Cannot create directory $directory.absolutePath")
+            throw IOException("Cannot create directory ${directory.absolutePath}")
         }
-        if (!directory.isDirectory) throw IOException("Not a directory: $directory.absolutePath")
+        if (!directory.isDirectory) throw IOException("Not a directory: ${directory}.absolutePath")
     }
 
     private fun ByteArray.toHex(): String =
