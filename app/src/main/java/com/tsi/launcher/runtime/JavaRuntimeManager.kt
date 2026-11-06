@@ -48,6 +48,8 @@ class JavaRuntimeManager(context: Context) {
         context.getExternalFilesDir(null) ?: context.filesDir,
         ".minecraft"
     )
+    private val privateRuntimeRoot = File(context.noBackupFilesDir, "tsi/.minecraft/runtimes")
+    private val legacyRuntimeRoot = File(root, "runtimes")
 
     fun inspect(versionId: String, runtimePreference: String): VersionVmInspection {
         val safeId = safeSegment(versionId)
@@ -151,10 +153,12 @@ class JavaRuntimeManager(context: Context) {
         )
     }
 
-    fun runtimeDirectory(): File = File(root, "runtimes")
+    fun runtimeDirectory(): File = privateRuntimeRoot
 
     private fun scanRuntimes(): List<DetectedJavaRuntime> {
-        val entries = runtimeDirectory().listFiles()?.filter { it.isDirectory } ?: return emptyList()
+        val entries = (listOf(privateRuntimeRoot, legacyRuntimeRoot)
+            .flatMap { directory -> directory.listFiles()?.filter { it.isDirectory }.orEmpty() })
+            .distinctBy { it.canonicalPath }
 
         return entries.mapNotNull { directory ->
             val homeCandidates = listOf(directory, File(directory, "jre"))
