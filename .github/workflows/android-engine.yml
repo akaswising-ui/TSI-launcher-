@@ -107,6 +107,10 @@ jobs:
           RELEASE_TAG: android-engine-debug-latest
         shell: bash
         run: |
+          # Keep the stable download tag pinned to the exact source commit that built this APK.
+          git tag --force "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_TAG" --force
+
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$APK_PATH" "$SHA_PATH" --repo "$GITHUB_REPOSITORY" --clobber
           else
