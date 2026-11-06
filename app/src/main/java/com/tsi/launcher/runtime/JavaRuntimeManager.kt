@@ -48,6 +48,9 @@ class JavaRuntimeManager(context: Context) {
         context.getExternalFilesDir(null) ?: context.filesDir,
         ".minecraft"
     )
+    // Amethyst's MultiRTUtils reads runtimes from Tools.MULTIRT_HOME,
+    // which is <app-data>/runtimes. Install once in that exact shared location.
+    private val amethystRuntimeRoot = File(context.filesDir.parentFile ?: context.filesDir, "runtimes")
     private val privateRuntimeRoot = File(context.noBackupFilesDir, "tsi/.minecraft/runtimes")
     private val legacyRuntimeRoot = File(root, "runtimes")
 
@@ -118,6 +121,7 @@ class JavaRuntimeManager(context: Context) {
 
         val objectDirectory = File(assetsRoot, "objects")
         val objectCount = objectDirectory.listFiles()?.count { it.isDirectory } ?: 0
+        val engineBridgeAvailable = AmethystEngineBridge.isAvailable(context)
 
         val blockers = buildList {
             if (!clientJar.isFile) add("Client JAR is missing for $safeId.")
@@ -133,7 +137,9 @@ class JavaRuntimeManager(context: Context) {
                 add("The Minecraft asset index is missing.")
             }
             if (objectCount == 0) add("Minecraft asset objects have not been installed.")
-            add("The Android JVM/LWJGL renderer bridge is not linked into TSI yet.")
+            if (!engineBridgeAvailable) {
+                add("The Amethyst Android engine is not included in this build (JVM, LWJGL, SDL and native renderer bridge missing).")
+            }
         }
 
         return VersionVmInspection(
@@ -148,15 +154,15 @@ class JavaRuntimeManager(context: Context) {
             assetObjectCount = objectCount,
             compatibleRuntime = compatible,
             detectedRuntimes = detected,
-            engineBridgeAvailable = false,
+            engineBridgeAvailable = engineBridgeAvailable,
             blockers = blockers
         )
     }
 
-    fun runtimeDirectory(): File = privateRuntimeRoot
+    fun runtimeDirectory(): File = amethystRuntimeRoot
 
     private fun scanRuntimes(): List<DetectedJavaRuntime> {
-        val entries = (listOf(privateRuntimeRoot, legacyRuntimeRoot)
+        val entries = (listOf(amethystRuntimeRoot, privateRuntimeRoot, legacyRuntimeRoot)
             .flatMap { directory -> directory.listFiles()?.filter { it.isDirectory }.orEmpty() })
             .distinctBy { it.canonicalPath }
 
