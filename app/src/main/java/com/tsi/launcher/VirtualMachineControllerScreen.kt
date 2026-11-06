@@ -77,6 +77,7 @@ fun VirtualMachineControllerScreen(
     var inspection by remember { mutableStateOf<VersionVmInspection?>(null) }
     var scanning by remember { mutableStateOf(false) }
     var installingRuntime by remember { mutableStateOf(false) }
+    var launchingGame by remember { mutableStateOf(false) }
     var runtimeInstallMessage by remember { mutableStateOf("") }
     var controllerMessage by remember {
         mutableStateOf("VM is stopped. Inspecting selected Minecraft installation…")
@@ -306,21 +307,34 @@ fun VirtualMachineControllerScreen(
                 if (ready == null || !ready.readyToLaunch || runtime == null) {
                     controllerMessage = "Launch blocked by preflight. Resolve every missing requirement first."
                 } else {
-                    try {
-                        AmethystEngineBridge.launch(
-                            context = context,
-                            versionId = versionId,
-                            heapMb = ramMb,
-                            runtime = runtime,
-                            playerName = playerName
-                        )
-                        controllerMessage = "Amethyst engine activity started for Minecraft $versionId."
-                    } catch (error: Exception) {
-                        controllerMessage = "Engine launch failed: ${error.cause?.message ?: error.message ?: "unknown error"}"
+                    scope.launch {
+                        launchingGame = true
+                        try {
+                            AmethystEngineBridge.prepare(context) { update ->
+                                withContext(Dispatchers.Main.immediate) {
+                                    controllerMessage = update
+                                }
+                            }
+                            withContext(Dispatchers.Main.immediate) {
+                                controllerMessage = "Starting Minecraft $versionId in the Amethyst game surface…"
+                                AmethystEngineBridge.launch(
+                                    context = context,
+                                    versionId = versionId,
+                                    heapMb = ramMb,
+                                    runtime = runtime,
+                                    playerName = playerName
+                                )
+                            }
+                        } catch (error: Exception) {
+                            controllerMessage =
+                                "Engine launch failed: ${error.cause?.message ?: error.message ?: "unknown error"}"
+                        } finally {
+                            launchingGame = false
+                        }
                     }
                 }
             },
-            enabled = inspection?.readyToLaunch == true && !scanning,
+            enabled = inspection?.readyToLaunch == true && !scanning && !launchingGame,
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(15.dp),
             colors = ButtonDefaults.buttonColors(
@@ -330,7 +344,10 @@ fun VirtualMachineControllerScreen(
         ) {
             Icon(Icons.Filled.PlayArrow, null)
             Spacer(Modifier.width(8.dp))
-            Text("START VIRTUAL MACHINE", fontWeight = FontWeight.Bold)
+            Text(
+                if (launchingGame) "PREPARING JAVA ENGINE…" else "START VIRTUAL MACHINE",
+                fontWeight = FontWeight.Bold
+            )
         }
 
         OutlinedButton(
