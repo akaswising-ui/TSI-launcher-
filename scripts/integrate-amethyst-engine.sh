@@ -20,6 +20,7 @@ root = Path(sys.argv[1])
 root_gradle = root / "build.gradle"
 app_gradle = root / "app_pojavlauncher/build.gradle"
 manifest_path = root / "app_pojavlauncher/src/main/AndroidManifest.xml"
+application_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/PojavApplication.java"
 
 def replace_once(text: str, old: str, new: str, description: str) -> str:
     count = text.count(old)
@@ -39,6 +40,12 @@ text = replace_once(
 root_gradle.write_text(text)
 
 text = app_gradle.read_text()
+text = replace_once(
+    text,
+    "    compileSdk = 37",
+    "    compileSdk = 36",
+    "Amethyst Android SDK platform compatibility",
+)
 text = replace_once(
     text,
     "plugins {\n    id 'com.android.application' version '9.3.1'\n}",
@@ -110,6 +117,18 @@ compose_dependencies = (
 )
 text = replace_once(text, dependency_marker, compose_dependencies, "Amethyst dependency insertion")
 app_gradle.write_text(text)
+
+# Initialize the default SharedPreferences before Amethyst reads JVM/profile settings.
+application = application_path.read_text()
+application = replace_once(
+    application,
+    "\t\t\tsuper.onCreate();\n\t\t\tif(Tools.checkStorageRoot(this)){",
+    "\t\t\tsuper.onCreate();\n"
+    "\t\t\tLauncherPreferences.DEFAULT_PREF = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);\n"
+    "\t\t\tif(Tools.checkStorageRoot(this)){",
+    "Amethyst default preferences initialization",
+)
+application_path.write_text(application)
 
 manifest = manifest_path.read_text()
 test_marker = '<activity\n            android:name=".TestStorageActivity"'

@@ -56,8 +56,8 @@ jobs:
           fi
           "$SDKMANAGER" \
             "platform-tools" \
-            "platforms;android-37" \
-            "build-tools;37.0.0" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
             "ndk;27.3.13750724"
 
       - name: Set up Gradle 9.6.1
