@@ -134,7 +134,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class MainSection { DASHBOARD, MOD_PACKS, NEWS, SETTINGS }
+private enum class MainSection { DASHBOARD, VM_CONTROLLER, MOD_PACKS, NEWS, SETTINGS }
 private enum class Edition { JAVA, BEDROCK }
 
 @Composable
@@ -303,6 +303,12 @@ private fun TsiLauncherApp() {
                         label = { Text("Dashboard") }
                     )
                     NavigationBarItem(
+                        selected = section == MainSection.VM_CONTROLLER,
+                        onClick = { section = MainSection.VM_CONTROLLER },
+                        icon = { Icon(Icons.Filled.Memory, contentDescription = null) },
+                        label = { Text("VM") }
+                    )
+                    NavigationBarItem(
                         selected = section == MainSection.MOD_PACKS,
                         onClick = { section = MainSection.MOD_PACKS },
                         icon = { Icon(Icons.Filled.Extension, contentDescription = null) },
@@ -368,7 +374,8 @@ private fun TsiLauncherApp() {
                                             val result = clientInstaller.downloadClientJar(version)
                                             val javaText = result.requiredJavaMajor?.toString() ?: "not specified"
                                             statusMessage =
-                                                "${result.versionId} client JAR verified. Required Java: $javaText. Full game runtime is not connected yet."
+                                                "${result.versionId} client JAR verified. Required Java: $javaText. Opening VM Controller for launch checks."
+                                            section = MainSection.VM_CONTROLLER
                                         } catch (error: Exception) {
                                             statusMessage =
                                                 "Download failed for ${version.id}: ${error.message ?: "unknown error"}"
@@ -385,6 +392,13 @@ private fun TsiLauncherApp() {
                             )
                         }
                     }
+                    MainSection.VM_CONTROLLER -> VirtualMachineControllerScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        versionId = selectedVersionId,
+                        ramMb = ramMb.toInt(),
+                        runtimePreference = javaRuntime,
+                        onBackToDashboard = { section = MainSection.DASHBOARD }
+                    )
                     MainSection.MOD_PACKS -> ModPackManagerScreen(
                         modifier = Modifier.fillMaxSize(),
                         profileName = profileName,
