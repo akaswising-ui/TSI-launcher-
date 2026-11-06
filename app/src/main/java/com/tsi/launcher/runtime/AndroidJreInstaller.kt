@@ -34,11 +34,14 @@ data class RuntimePackage(
 class AndroidJreInstaller(context: Context) {
     private val gameRoot = VersionDirectoryManager(context.applicationContext).root()
 
-    // Android app-private storage supports executable/runtime files and native
-    // library loading. External app-specific storage is intended for game data,
-    // not the extracted JVM runtime.
-    private val runtimeRoot = File(context.noBackupFilesDir, "tsi/.minecraft/runtimes")
-    private val legacyRuntimeRoot = File(gameRoot, "runtimes")
+    // This is the same folder Amethyst sets as Tools.MULTIRT_HOME:
+    // context.filesDir.parentFile/runtimes. Its MultiRT loader reads JREs here.
+    private val runtimeRoot = File(context.filesDir.parentFile ?: context.filesDir, "runtimes")
+    private val legacyRuntimeRoots = listOf(
+        File(context.noBackupFilesDir, "tsi/.minecraft/runtimes"),
+        File(gameRoot, "runtimes")
+    )
+    private val runtimeNamePrefix = "TSI-External-"
 
     fun supportedRuntimeMajors(): List<Int> = listOf(8, 17, 21, 25)
 
@@ -56,19 +59,40 @@ class AndroidJreInstaller(context: Context) {
     fun isInstalled(javaMajor: Int): Boolean = findInstalledRuntime(javaMajor) != null
 
     private fun findInstalledRuntime(javaMajor: Int): File? {
-        return listOf(runtimeRoot, legacyRuntimeRoot)
-            .asSequence()
-            .map { File(it, "External-$javaMajor") }
-            .firstOrNull { directory ->
-                val release = File(directory, "release")
-                if (!release.isFile) return@firstOrNull false
-                val properties = parseRelease(release)
-                val version = properties["JAVA_VERSION"].orEmpty().trim('"')
-                val arch = properties["OS_ARCH"].orEmpty().trim('"')
-                parseJavaMajor(version) == javaMajor &&
-                    isDeviceCompatible(arch) &&
-                    findJvmLibrary(directory) != null
+        val preferred = File(runtimeRoot, "$runtimeNamePrefix$javaMajor")
+        if (isValidRuntime(preferred, javaMajor)) return preferred
+
+        // Keep any older TSI installs usable, but copy them into Amethyst's
+        // MultiRT_HOME without deleting the source directory.
+        val legacyCandidates = buildList {
+            add(File(runtimeRoot, "External-$javaMajor"))
+            legacyRuntimeRoots.forEach { root ->
+                add(File(root, "$runtimeNamePrefix$javaMajor"))
+                add(File(root, "External-$javaMajor"))
             }
+        }
+        for (legacy in legacyCandidates) {
+            if (!isValidRuntime(legacy, javaMajor)) continue
+            ensureDirectory(runtimeRoot)
+            if (!preferred.exists()) {
+                legacy.copyRecursively(preferred, overwrite = false)
+            }
+            if (isValidRuntime(preferred, javaMajor)) return preferred
+        }
+        return null
+    }
+
+    private fun isValidRuntime(directory: File, javaMajor: Int): Boolean {
+        val release = File(directory, "release")
+        if (!release.isFile) return false
+        return runCatching {
+            val properties = parseRelease(release)
+            val version = properties["JAVA_VERSION"].orEmpty().trim('"')
+            val arch = properties["OS_ARCH"].orEmpty().trim('"')
+            parseJavaMajor(version) == javaMajor &&
+                isDeviceCompatible(arch) &&
+                findJvmLibrary(directory) != null
+        }.getOrDefault(false)
     }
 
     suspend fun downloadAndInstall(
@@ -86,8 +110,8 @@ class AndroidJreInstaller(context: Context) {
 
         ensureDirectory(runtimeRoot)
         val archive = File(runtimeRoot, "jre$javaMajor-android-$arch.tar.xz.part")
-        val temporaryDirectory = File(runtimeRoot, "External-$javaMajor.installing")
-        val finalDirectory = File(runtimeRoot, "External-$javaMajor")
+        val temporaryDirectory = File(runtimeRoot, "$runtimeNamePrefix$javaMajor.installing")
+        val finalDirectory = File(runtimeRoot, "$runtimeNamePrefix$javaMajor")
         deleteRecursively(temporaryDirectory)
 
         progress("Downloading Android OpenJDK $javaMajor for $arch…")
@@ -112,7 +136,7 @@ class AndroidJreInstaller(context: Context) {
             throw IOException("The extracted Java runtime failed version, ABI or libjvm validation.")
         }
 
-        val backup = File(runtimeRoot, "External-$javaMajor.previous")
+        val backup = File(runtimeRoot, "$runtimeNamePrefix$javaMajor.previous")
         deleteRecursively(backup)
         if (finalDirectory.exists() && !finalDirectory.renameTo(backup)) {
             deleteRecursively(temporaryDirectory)
