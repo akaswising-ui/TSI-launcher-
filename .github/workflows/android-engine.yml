@@ -111,12 +111,18 @@ jobs:
 
           required = [
               "Lcom/tsi/launcher/MainActivity;",
+              "Lcom/tsi/launcher/bedrock/BedrockVersionHistoryStore;",
               "Account manager",
               "Offline username",
               "Continue with Microsoft",
               "Create a free Microsoft account",
               "File Manager access",
               "OPEN FILE ACCESS SETTINGS",
+              "STABLE AND BETA SHARE ONE ANDROID APP",
+              "VERSION HISTORY",
+              "Installed version detected",
+              "Last selected Android channel:",
+              "No separate Android Preview app",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
