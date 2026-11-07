@@ -120,6 +120,11 @@ import com.tsi.launcher.bedrock.BedrockIntegration
 import com.tsi.launcher.bedrock.BedrockChannel
 import com.tsi.launcher.bedrock.BedrockVersionEntry
 import com.tsi.launcher.bedrock.BedrockVersionCatalog
+import com.tsi.launcher.bedrock.BedrockVersionHistoryStore
+import com.tsi.launcher.bedrock.BedrockHistoryEntry
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.tsi.launcher.data.JavaGameInstaller
 import com.tsi.launcher.runtime.AmethystEngineBridge
 import com.tsi.launcher.data.MinecraftVersion
@@ -140,6 +145,7 @@ private val TsiLine = Color(0xFFDCE7EA)
 
 class MainActivity : ComponentActivity() {
     var onLauncherResumed: (() -> Unit)? = null
+    var onBedrockResumed: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -149,6 +155,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         onLauncherResumed?.invoke()
+        onBedrockResumed?.invoke()
     }
 }
 
@@ -1343,13 +1350,26 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
     var selectedChannel by rememberSaveable { mutableStateOf(BedrockChannel.ALL) }
     var catalogMessage by remember { mutableStateOf("Loading official Bedrock channels…") }
     var catalogLoading by remember { mutableStateOf(false) }
+    var history by remember { mutableStateOf(BedrockVersionHistoryStore.read(context)) }
+    var selectedTrack by remember { mutableStateOf(BedrockVersionHistoryStore.selectedTrack(context)) }
     val catalogScope = rememberCoroutineScope()
+
+    fun refreshInstalledPackage() {
+        status = BedrockIntegration.readInstallStatus(context)
+        history = BedrockVersionHistoryStore.recordInstalledPackage(context, status)
+        selectedTrack = BedrockVersionHistoryStore.selectedTrack(context)
+    }
+
+    fun selectTrack(track: String) {
+        history = BedrockVersionHistoryStore.selectTrack(context, track)
+        selectedTrack = BedrockVersionHistoryStore.selectedTrack(context)
+    }
 
     suspend fun refreshBedrockCatalog() {
         catalogLoading = true
         catalogMessage = "Refreshing official Bedrock channels…"
         try {
-            entries = BedrockVersionCatalog.fetch(context)
+            entries = BedrockVersionCatalog.fetch()
             catalogMessage = "Official channel catalogue updated."
         } catch (error: Exception) {
             catalogMessage = "Using built-in official links. Refresh failed: ${error.message ?: "network unavailable"}"
@@ -1358,17 +1378,38 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
         }
     }
 
+    fun openChannelEntry(entry: BedrockVersionEntry) {
+        try {
+            when (entry.id) {
+                "stable" -> selectTrack(BedrockVersionHistoryStore.TRACK_STABLE)
+                "beta" -> selectTrack(BedrockVersionHistoryStore.TRACK_BETA)
+                // Android Preview is documented as the in-place Beta track, not a separate app.
+            }
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.actionUrl)))
+        } catch (error: Exception) {
+            launchMessage = error.message ?: "Could not open the official Minecraft page."
+        }
+    }
+
     LaunchedEffect(Unit) {
+        refreshInstalledPackage()
         catalogLoading = true
         try {
-            entries = BedrockVersionCatalog.fetch(context)
+            entries = BedrockVersionCatalog.fetch()
             catalogMessage = "Official channel catalogue updated."
         } catch (error: Exception) {
             catalogMessage = "Using built-in official links. Catalogue refresh failed: ${error.message ?: "network unavailable"}"
         } finally {
             catalogLoading = false
         }
-        status = BedrockIntegration.readInstallStatus(context)
+    }
+
+    val hostActivity = context as? MainActivity
+    androidx.compose.runtime.DisposableEffect(hostActivity) {
+        hostActivity?.onBedrockResumed = { refreshInstalledPackage() }
+        onDispose {
+            hostActivity?.onBedrockResumed = null
+        }
     }
 
     val filteredEntries = entries.filter { entry ->
@@ -1379,9 +1420,7 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                 entry.badge.contains(searchQuery, ignoreCase = true))
     }
 
-    Column(
-        modifier = modifier.background(Color(0xFF0B1017))
-    ) {
+    Column(modifier = modifier.background(Color(0xFF0B1017))) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
@@ -1396,33 +1435,17 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                 ) {
                     Column(
                         Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(11.dp)
                     ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(150.dp)
-                                .clip(RoundedCornerShape(18.dp))
-                        ) {
-                            Canvas(Modifier.fillMaxSize()) {
-                                drawRect(Brush.verticalGradient(listOf(Color(0xFF174C5B), Color(0xFF172C34))))
-                                drawRect(Color(0xFF386C43), Offset(0f, size.height * 0.66f), Size(size.width, size.height * 0.34f))
-                                for (i in 0..7) {
-                                    val x = size.width * (0.06f + i * 0.13f)
-                                    drawRect(Color(0xFF604634), Offset(x, size.height * 0.48f), Size(size.height * 0.055f, size.height * 0.28f))
-                                    drawRect(Color(0xFF2F754D), Offset(x - 10f, size.height * 0.30f), Size(size.height * 0.12f, size.height * 0.20f))
-                                }
-                            }
+                        Text("INSTALLED ANDROID CLIENT", color = Color(0xFF9AAAB8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "BEDROCK EDITION",
-                                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                                "Minecraft Bedrock",
                                 color = Color.White,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 23.sp
+                                fontSize = 20.sp,
+                                modifier = Modifier.weight(1f)
                             )
-                        }
-                        Text("Minecraft for Android", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
                                 color = if (status.installed) Color(0xFF174B37) else Color(0xFF59411F),
                                 shape = RoundedCornerShape(50)
@@ -1435,15 +1458,32 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                                     fontSize = 10.sp
                                 )
                             }
-                            Spacer(Modifier.width(8.dp))
-                            Text(status.versionName ?: status.message, color = Color(0xFFB3C0CB), fontSize = 12.sp)
                         }
+                        Text(
+                            if (status.installed) "Version ${status.versionName ?: "Unknown"}  •  Code ${status.versionCode ?: 0L}"
+                            else status.message,
+                            color = Color(0xFFCAD5DE),
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            "Package: ${BedrockIntegration.OFFICIAL_PACKAGE}",
+                            color = Color(0xFF9AAAB8),
+                            fontSize = 11.sp
+                        )
+                        Text(
+                            "Last selected Android channel: $selectedTrack",
+                            color = Color(0xFF62D6A0),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            "This is your saved channel choice only. Android does not expose Play Beta enrollment status to TSI.",
+                            color = Color(0xFF9AAAB8),
+                            fontSize = 11.sp
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
-                                onClick = {
-                                    status = BedrockIntegration.readInstallStatus(context)
-                                    launchMessage = ""
-                                },
+                                onClick = { refreshInstalledPackage(); launchMessage = "" },
                                 shape = RoundedCornerShape(24.dp)
                             ) {
                                 Icon(Icons.Filled.Refresh, null)
@@ -1464,7 +1504,8 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF35B978))
                             ) {
                                 Icon(Icons.Filled.PlayArrow, null)
-                                Text("PLAY")
+                                Spacer(Modifier.width(5.dp))
+                                Text("PLAY INSTALLED")
                             }
                         }
                         if (launchMessage.isNotBlank()) {
@@ -1473,14 +1514,33 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                     }
                 }
             }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF19352F))
+                ) {
+                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("STABLE AND BETA SHARE ONE ANDROID APP", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(
+                            "Joining the official Android Beta updates the same Minecraft package. It replaces the normal client, so Stable and Beta cannot be installed side-by-side. Use Google Play to join or leave the testing track.",
+                            color = Color(0xFFD1E4DD),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
             item {
                 Text("VERSION CHANNELS", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
                 Text(
-                    "Search official Android release channels. Install and update are handled by Google Play.",
+                    "Official Android release and testing channels. Google Play handles downloads, signatures and updates.",
                     color = Color(0xFF9AAAB8),
                     fontSize = 12.sp
                 )
             }
+
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     listOf(
@@ -1503,6 +1563,7 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                     }
                 }
             }
+
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(catalogMessage, color = Color(0xFF9AAAB8), fontSize = 11.sp, modifier = Modifier.weight(1f))
@@ -1514,20 +1575,52 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                     }
                 }
             }
+
             if (filteredEntries.isEmpty()) {
                 item {
                     Text("No matching Bedrock channel found.", color = Color(0xFFCAD5DE), modifier = Modifier.padding(18.dp))
                 }
             }
+
             items(filteredEntries, key = { it.id }) { entry ->
-                BedrockVersionCard(entry = entry) {
-                    try {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.actionUrl)))
-                    } catch (error: Exception) {
-                        launchMessage = error.message ?: "Could not open the official store page."
+                BedrockVersionCard(entry = entry) { openChannelEntry(entry) }
+            }
+
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("VERSION HISTORY", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { history = BedrockVersionHistoryStore.read(context) }) {
+                        Text("RELOAD", color = Color(0xFF62D6A0), fontSize = 10.sp)
+                    }
+                }
+                Text(
+                    "Local history of version changes observed by TSI. It is saved on this device.",
+                    color = Color(0xFF9AAAB8),
+                    fontSize = 11.sp
+                )
+            }
+
+            if (history.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D))
+                    ) {
+                        Text(
+                            "No version changes recorded yet. TSI will add an entry when it first detects the installed app or notices a new version.",
+                            color = Color(0xFFB3C0CB),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(15.dp)
+                        )
                     }
                 }
             }
+
+            items(history, key = { it.id }) { item ->
+                BedrockHistoryCard(item)
+            }
+
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1535,15 +1628,47 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D))
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("About older Bedrock builds", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("About Android Preview", color = Color.White, fontWeight = FontWeight.Bold)
                         Text(
-                            "Bedrock Android does not publish a public snapshot archive like Java Edition. TSI will not mirror signed game APKs or offer unofficial downgrade packages. Older builds can also conflict with worlds, signatures and online services.",
+                            "The Android mobile flow uses the in-place Beta track. The separate Minecraft Preview app is not an independently installed Android client. TSI therefore does not invent a second Preview package or claim it is installed.",
                             color = Color(0xFF9AAAB8),
                             fontSize = 12.sp
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BedrockHistoryCard(entry: BedrockHistoryEntry) {
+    val title = when (entry.eventType) {
+        "VERSION_OBSERVED" -> "Installed version detected"
+        "TRACK_SELECTED" -> "Channel selected in TSI"
+        else -> "Bedrock history event"
+    }
+    val timeLabel = remember(entry.timestamp) {
+        SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(entry.timestamp))
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D)),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text(entry.selectedTrack, color = Color(0xFF62D6A0), fontWeight = FontWeight.Bold, fontSize = 9.sp)
+            }
+            Text(
+                "${entry.versionName}  •  Code ${entry.versionCode}",
+                color = Color(0xFFCAD5DE),
+                fontSize = 12.sp
+            )
+            Text(entry.packageName, color = Color(0xFF9AAAB8), fontSize = 10.sp)
+            Text(timeLabel, color = Color(0xFF9AAAB8), fontSize = 10.sp)
         }
     }
 }
