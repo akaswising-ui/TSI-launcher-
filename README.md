@@ -1,121 +1,67 @@
-# TSI Launcher
+# TSI Launcher Java Edition
 
-TSI Launcher is an Android launcher project for one dashboard that manages Minecraft Java Edition data and integrates with the official Minecraft Bedrock Android app.
+An Android launcher dedicated to **Minecraft Java Edition**. Bedrock-specific screens, package detection and version-channel catalogues live in the separate [TSI Launcher Bedrock Edition repository](https://github.com/akaswising-ui/TSI-Launcher-Bedrock-edition-).
 
-## Project rule: preserve existing work
+## Java Edition features
 
-New modules are added alongside existing project files. The initial repository contained only its Android `.gitignore`; this setup does not delete or replace it.
+- Java version catalogue from Mojang's official manifest.
+- Release, Snapshot, Old Alpha and Old Beta filters.
+- Per-version metadata and game directories.
+- Verified downloads for version JSON, client JAR, libraries and assets.
+- Android Java runtime detection and installation.
+- Amethyst Android engine integration for the JVM, SDL, LWJGL, graphics and input host.
+- Account management through Amethyst's Microsoft login flow; local profiles are clearly offline profiles.
+- VM preflight checks before launch.
 
-## Current implementation
+The engine-integrated debug APK is assembled by `.github/workflows/android-engine.yml` using the pinned Amethyst Android revision. A successful CI build verifies APK packaging and DEX contents. It does **not** prove that every historical Minecraft version will run on every phone; renderer, LWJGL, native-library and Java-version requirements vary by release.
 
-- Kotlin Android application with Jetpack Compose.
-- Java Edition tab fetches the official Mojang version manifest and lists every manifest entry returned by the endpoint.
-- Filters: Release, Snapshot, Old Alpha and Old Beta.
-- Local profile-name field (not Microsoft authentication).
-- Client JAR download for a selected Java version, with official-host allowlisting and SHA-1/size verification.
-- Per-version metadata folders and separate per-version game directories.
-- Bedrock tab detects the installed official Android package, displays its installed version and opens it through Android's package launcher API.
-- Settings UI stores a requested RAM limit and preferred Java runtime line.
+## Vivo Y22 / 6 GB RAM profile
 
-## Important scope boundary
+The launcher reads Android's reported physical RAM and selects a conservative heap target:
+- Recommended heap on a 6 GB-class device: **1536 MB**.
+- Maximum heap on a 6 GB-class device: **2048 MB**.
+- Older saved values above the device limit are clamped before the JVM starts.
+- The remaining memory is left for Android, the launcher, native graphics/audio libraries and the game process.
 
-This first milestone is a **launcher foundation**, not yet a complete Minecraft execution engine.
-
-A Java client JAR by itself is not a playable installation. A complete Java installation must also resolve the version JSON, libraries, platform-specific native libraries, asset indexes, assets, launch arguments, authentication and the renderer/input integration. Android cannot run a normal desktop Minecraft JAR by calling `java -jar` from the app. It needs an Android-compatible JVM build, compatible LWJGL/native libraries and an Android surface/input bridge.
-
-The next Java engine integration target should be the maintained Amethyst Android codebase, the successor project identified by the PojavLauncher repository. It should be integrated as a separate runtime/engine module or adapter after reviewing its current license, source layout, build requirements and native dependencies. Do not copy files blindly or remove license notices.
-
-Bedrock Edition for Android is proprietary. TSI therefore detects and launches the official installed app; it does not host, patch, downgrade, or redistribute Bedrock APKs or game data. Android package signatures and package-manager rules prevent a third-party launcher from silently replacing another app's installed signed package.
+Heap size is not the same as total game memory. Minecraft and its native renderer also use memory outside the Java heap. These settings reduce avoidable memory pressure; they cannot guarantee that every version or modpack fits.
 
 ## Storage layout
 
-The app stores files under its app-specific external files directory (or internal app files directory if external app-specific storage is unavailable):
+Game data is stored in app-specific external storage when available:
 
 ```text
 .minecraft/
-  versions/
-    1.20.4/
-      1.20.4.json
-      1.20.4.jar
-    1.8.9/
-      1.8.9.json
-      1.8.9.jar
-  instances/
-    1.20.4/
-      game/
-        saves/
-        resourcepacks/
-        screenshots/
-        mods/
-        config/
-        logs/
-    1.8.9/
-      game/
-        saves/
-        resourcepacks/
-        screenshots/
-        mods/
-        config/
-        logs/
-  assets/
+  versions/<version>/
+  instances/<version>/game/
   libraries/
+  assets/
 ```
 
-Each version receives a distinct game directory. This prevents saves, resource packs, options, mods and configs from colliding. Large immutable assets and libraries can be shared when their checksums and paths match.
-
-App-specific storage does not require broad storage permissions, but Android removes it when TSI is uninstalled. A future export/import feature should use the Storage Access Framework so users can back up worlds and instances.
-
-## Planned Java launch pipeline
-
-1. Fetch manifest and selected version JSON.
-2. Resolve the required Java major version from `javaVersion.majorVersion`.
-3. Download client JAR, libraries and asset index; verify supplied SHA-1 values and expected sizes.
-4. Download only the libraries applicable to Android's OS and CPU architecture.
-5. Extract native libraries into a version/runtime-specific native directory.
-6. Build the classpath and version-specific JVM arguments from the metadata; account for the LWJGL generation and the Android renderer bridge.
-7. Mount the selected instance's game directory as `gameDirectory`.
-8. Start the embedded Android JVM through the engine bridge, passing the correct arguments, OpenGL/Vulkan backend, surface and input callbacks.
-
-Do not assume a single set of JVM arguments or a single LWJGL build works for every historical version. Older releases and modern releases have different library/native requirements.
-
-## Authentication and profiles
-
-The current profile field is explicitly a local profile label. It is not a Microsoft login and must not be presented as an authenticated Mojang/Microsoft identity.
-
-A production online-login implementation must use the supported Microsoft/Xbox/Minecraft authentication flow, use secure browser-based OAuth with PKCE where applicable, protect tokens using Android Keystore-backed storage, and never ask the user to type a Microsoft password into a TSI password field. Offline profiles must be clearly labelled and limited to what the selected game/server permits.
+Each Minecraft version has its own instance directory so saves, options, mods and configuration files do not overwrite one another. Shared immutable libraries and verified assets may be reused.
 
 ## Build
 
 Requirements:
-- Android Studio with Android SDK Platform 36.
-- JDK 17 for the Android build.
-- Gradle 8.13 or a compatible Gradle installation.
+- Android SDK Platform 36
+- JDK 21 for the engine-integrated workflow
+- Gradle 9.6.1 for the pinned Amethyst build
 
-Open this repository in Android Studio and sync Gradle, then run the `app` configuration on an Android device/emulator.
-
-From a machine with Gradle installed:
+The CI workflow checks out the pinned upstream Amethyst Android source, applies `scripts/integrate-amethyst-engine.sh`, then builds:
 
 ```bash
-gradle :app:assembleDebug
+./gradlew :app_pojavlauncher:assembleDebug
 ```
 
-APK output:
+The build output is staged as `TSI-Launcher-engine-debug.apk` and published by the workflow when the build succeeds.
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
+## Scope and compatibility
 
-## Dependencies
+- This repository is Java Edition only. It does not detect or launch the Bedrock Android package.
+- A desktop Java installation is not sufficient. The launcher needs an Android-built JRE and the Android game host/native components.
+- Java runtime selection follows the version metadata's required major version.
+- Some historical versions may still require native or renderer compatibility work.
+- A crash-free guarantee requires testing the actual phone and the selected Minecraft version. When a launch fails, attach `.minecraft/latestlog.txt` and the Android crash log; the first visible error alone may not identify the root cause.
 
-- Kotlin Android plugin and Compose compiler plugin.
-- Jetpack Compose BOM `2026.09.00`, Material 3 and Activity Compose.
-- Kotlin Coroutines for network work away from the UI thread.
+## Upstream engine
 
-## Security and compatibility notes
-
-- Only HTTPS Mojang/Minecraft download hosts (plus the historical official Minecraft S3 path) are accepted by the initial client downloader.
-- Client JAR checksum and byte-size metadata are checked before the file is committed.
-- Version IDs are sanitized and canonical paths are checked before creating directories.
-- The manifest is a catalogue, not a guarantee that every historical asset or library is still downloadable.
-- Package visibility is limited to `com.mojang.minecraftpe`; TSI does not request broad `QUERY_ALL_PACKAGES` visibility.
-- RAM allocation is a requested heap limit, not a promise that a device can run a particular Minecraft version.
+The Android engine is pinned to [AngelAuraMC/Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android) revision `28d6e12d68121b7dd75f2e841058a6b7cdfe4a29`. Preserve upstream license notices and native dependency notices when modifying the integration.
