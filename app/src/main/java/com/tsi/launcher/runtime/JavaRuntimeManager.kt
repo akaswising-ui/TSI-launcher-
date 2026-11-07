@@ -26,6 +26,7 @@ data class VersionVmInspection(
     val assetIndexId: String?,
     val assetIndexExists: Boolean,
     val assetObjectCount: Int,
+    val assetObjectTotal: Int,
     val compatibleRuntime: DetectedJavaRuntime?,
     val detectedRuntimes: List<DetectedJavaRuntime>,
     val engineBridgeAvailable: Boolean,
@@ -64,10 +65,13 @@ class JavaRuntimeManager(private val context: Context) {
         val assetsRoot = File(root, "assets")
 
         var requiredMajor: Int? = null
+        var clientJarValid = false
         var libraryCount = 0
         var installedLibraryCount = 0
         var assetIndexId: String? = null
         var assetIndexExists = false
+        var assetObjectCount = 0
+        var assetObjectTotal = 0
 
         if (metadataFile.isFile) {
             try {
@@ -81,6 +85,12 @@ class JavaRuntimeManager(private val context: Context) {
                     requiredMajor = 8
                 }
 
+                val clientDownload = metadata.optJSONObject("downloads")
+                    ?.optJSONObject("client")
+                val expectedClientSize = clientDownload?.optLong("size", -1L) ?: -1L
+                clientJarValid = clientJar.isFile &&
+                    (expectedClientSize <= 0L || clientJar.length() == expectedClientSize)
+
                 val libraries = metadata.optJSONArray("libraries")
                 if (libraries != null) {
                     for (index in 0 until libraries.length()) {
@@ -89,11 +99,19 @@ class JavaRuntimeManager(private val context: Context) {
                         val downloads = library.optJSONObject("downloads") ?: continue
                         val artifact = downloads.optJSONObject("artifact") ?: continue
                         val relativePath = artifact.optString("path")
-                        if (relativePath.isBlank()) continue
+                        if (relativePath.isBlank() || relativePath.startsWith("/") ||
+                            relativePath.contains('\\')
+                        ) continue
+
+                        val libraryRoot = librariesRoot.canonicalFile
+                        val local = File(librariesRoot, relativePath).canonicalFile
+                        if (!local.path.startsWith(libraryRoot.path + File.separator)) continue
 
                         libraryCount++
-                        val local = File(librariesRoot, relativePath)
-                        if (local.isFile) installedLibraryCount++
+                        val expectedSize = artifact.optLong("size", -1L)
+                        if (local.isFile && (expectedSize <= 0L || local.length() == expectedSize)) {
+                            installedLibraryCount++
+                        }
                     }
                 }
 
@@ -102,10 +120,33 @@ class JavaRuntimeManager(private val context: Context) {
                     ?.takeIf { !it.isNullOrBlank() }
 
                 if (assetIndexId != null) {
-                    assetIndexExists = File(
-                        File(assetsRoot, "indexes"),
-                        "$assetIndexId.json"
-                    ).isFile
+                    val assetIndexFile = File(File(assetsRoot, "indexes"), "$assetIndexId.json")
+                    val assetIndexMetadata = metadata.optJSONObject("assetIndex")
+                    val expectedIndexSize = assetIndexMetadata?.optLong("size", -1L) ?: -1L
+                    assetIndexExists = assetIndexFile.isFile &&
+                        assetIndexFile.length() > 0L &&
+                        (expectedIndexSize <= 0L || assetIndexFile.length() == expectedIndexSize)
+
+                    if (assetIndexExists) {
+                        val objectMap = JSONObject(assetIndexFile.readText(Charsets.UTF_8))
+                            .optJSONObject("objects")
+                            ?: throw IOException("Asset index has no objects map.")
+                        assetObjectTotal = objectMap.length()
+                        val objectKeys = objectMap.keys()
+                        val objectDirectory = File(assetsRoot, "objects")
+                        while (objectKeys.hasNext()) {
+                            val item = objectMap.optJSONObject(objectKeys.next()) ?: continue
+                            val hash = item.optString("hash").lowercase(Locale.ROOT)
+                            if (!hash.matches(Regex("[a-f0-9]{40}"))) continue
+                            val expectedSize = item.optLong("size", -1L)
+                            val objectFile = File(File(objectDirectory, hash.substring(0, 2)), hash)
+                            if (objectFile.isFile &&
+                                (expectedSize <= 0L || objectFile.length() == expectedSize)
+                            ) {
+                                assetObjectCount++
+                            }
+                        }
+                    }
                 }
             } catch (_: Exception) {
                 // Missing or corrupt metadata is reported in blockers below.
@@ -129,12 +170,10 @@ class JavaRuntimeManager(private val context: Context) {
             detected.firstOrNull { it.majorVersion >= minimum }
         }
 
-        val objectDirectory = File(assetsRoot, "objects")
-        val objectCount = objectDirectory.listFiles()?.count { it.isDirectory } ?: 0
         val engineBridgeAvailable = AmethystEngineBridge.isAvailable(context)
 
         val blockers = buildList {
-            if (!clientJar.isFile) add("Client JAR is missing for $safeId.")
+            if (!clientJarValid) add("Client JAR is missing, incomplete or has the wrong size for $safeId.")
             if (!metadataFile.isFile) add("Version metadata JSON is missing.")
             if (requiredMajor == null) add("Java major version could not be resolved from version metadata.")
             if (minimumMajor != null && compatible == null) {
@@ -146,7 +185,11 @@ class JavaRuntimeManager(private val context: Context) {
             if (assetIndexId == null || !assetIndexExists) {
                 add("The Minecraft asset index is missing.")
             }
-            if (objectCount == 0) add("Minecraft asset objects have not been installed.")
+            if (assetObjectTotal == 0) {
+                add("The asset index contains no readable object entries.")
+            } else if (assetObjectCount < assetObjectTotal) {
+                add("Minecraft assets are incomplete ($assetObjectCount/$assetObjectTotal objects are present with expected sizes).")
+            }
             if (!engineBridgeAvailable) {
                 add("The Amethyst Android engine is not included in this build (JVM, LWJGL, SDL and native renderer bridge missing).")
             }
@@ -154,14 +197,15 @@ class JavaRuntimeManager(private val context: Context) {
 
         return VersionVmInspection(
             versionId = safeId,
-            clientJarExists = clientJar.isFile,
+            clientJarExists = clientJarValid,
             metadataExists = metadataFile.isFile,
             requiredJavaMajor = requiredMajor,
             libraryCount = libraryCount,
             installedLibraryCount = installedLibraryCount,
             assetIndexId = assetIndexId,
             assetIndexExists = assetIndexExists,
-            assetObjectCount = objectCount,
+            assetObjectCount = assetObjectCount,
+            assetObjectTotal = assetObjectTotal,
             compatibleRuntime = compatible,
             detectedRuntimes = detected,
             engineBridgeAvailable = engineBridgeAvailable,
