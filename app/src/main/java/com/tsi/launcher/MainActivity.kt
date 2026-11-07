@@ -117,6 +117,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tsi.launcher.bedrock.BedrockIntegration
+import com.tsi.launcher.bedrock.BedrockChannel
+import com.tsi.launcher.bedrock.BedrockVersionEntry
+import com.tsi.launcher.bedrock.BedrockVersionCatalog
 import com.tsi.launcher.data.JavaGameInstaller
 import com.tsi.launcher.runtime.AmethystEngineBridge
 import com.tsi.launcher.data.MinecraftVersion
@@ -1336,100 +1339,264 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
     val context = LocalContext.current
     var status by remember { mutableStateOf(BedrockIntegration.readInstallStatus(context)) }
     var launchMessage by remember { mutableStateOf("") }
+    var entries by remember { mutableStateOf(BedrockVersionCatalog.builtInFallback()) }
+    var selectedChannel by rememberSaveable { mutableStateOf(BedrockChannel.ALL) }
+    var catalogMessage by remember { mutableStateOf("Loading official Bedrock channels…") }
+    var catalogLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        catalogLoading = true
+        try {
+            entries = BedrockVersionCatalog.fetch(context)
+            catalogMessage = "Official channel catalogue updated."
+        } catch (error: Exception) {
+            catalogMessage = "Using built-in official links. Catalogue refresh failed: ${error.message ?: "network unavailable"}"
+        } finally {
+            catalogLoading = false
+        }
+        status = BedrockIntegration.readInstallStatus(context)
+    }
+
+    val filteredEntries = entries.filter { entry ->
+        (selectedChannel == BedrockChannel.ALL || entry.channel == selectedChannel) &&
+            (searchQuery.isBlank() ||
+                entry.name.contains(searchQuery, ignoreCase = true) ||
+                entry.versionLabel.contains(searchQuery, ignoreCase = true) ||
+                entry.badge.contains(searchQuery, ignoreCase = true))
+    }
 
     Column(
-        modifier = modifier
-            .background(Brush.verticalGradient(listOf(Color(0xFFEAF4F7), TsiPage)))
-            .verticalScroll(rememberScrollState())
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier = modifier.background(Color(0xFF0B1017))
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(3.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(170.dp)
-                        .clip(RoundedCornerShape(18.dp))
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D)),
+                    elevation = CardDefaults.cardElevation(0.dp)
                 ) {
-                    Canvas(Modifier.fillMaxSize()) {
-                        drawRect(Brush.verticalGradient(listOf(Color(0xFF5CC5E7), Color(0xFFBFE7E8))))
-                        drawRect(Color(0xFF6CB66B), Offset(0f, size.height * 0.65f), Size(size.width, size.height * 0.35f))
-                        for (i in 0..7) {
-                            val x = size.width * (0.06f + i * 0.13f)
-                            drawRect(Color(0xFF76513E), Offset(x, size.height * 0.47f), Size(size.height * 0.055f, size.height * 0.28f))
-                            drawRect(Color(0xFF398954), Offset(x - 10f, size.height * 0.30f), Size(size.height * 0.12f, size.height * 0.20f))
+                    Column(
+                        Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                        ) {
+                            Canvas(Modifier.fillMaxSize()) {
+                                drawRect(Brush.verticalGradient(listOf(Color(0xFF174C5B), Color(0xFF172C34))))
+                                drawRect(Color(0xFF386C43), Offset(0f, size.height * 0.66f), Size(size.width, size.height * 0.34f))
+                                for (i in 0..7) {
+                                    val x = size.width * (0.06f + i * 0.13f)
+                                    drawRect(Color(0xFF604634), Offset(x, size.height * 0.48f), Size(size.height * 0.055f, size.height * 0.28f))
+                                    drawRect(Color(0xFF2F754D), Offset(x - 10f, size.height * 0.30f), Size(size.height * 0.12f, size.height * 0.20f))
+                                }
+                            }
+                            Text(
+                                "BEDROCK EDITION",
+                                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 23.sp
+                            )
+                        }
+                        Text("Minecraft for Android", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                color = if (status.installed) Color(0xFF174B37) else Color(0xFF59411F),
+                                shape = RoundedCornerShape(50)
+                            ) {
+                                Text(
+                                    if (status.installed) "INSTALLED" else "NOT INSTALLED",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    color = if (status.installed) Color(0xFF83E0B0) else Color(0xFFFFCE83),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(status.versionName ?: status.message, color = Color(0xFFB3C0CB), fontSize = 12.sp)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    status = BedrockIntegration.readInstallStatus(context)
+                                    launchMessage = ""
+                                },
+                                shape = RoundedCornerShape(24.dp)
+                            ) {
+                                Icon(Icons.Filled.Refresh, null)
+                                Spacer(Modifier.width(5.dp))
+                                Text("CHECK")
+                            }
+                            Button(
+                                enabled = status.installed,
+                                onClick = {
+                                    try {
+                                        BedrockIntegration.launchInstalledGame(context)
+                                        launchMessage = "Opening the installed Minecraft app…"
+                                    } catch (error: Exception) {
+                                        launchMessage = error.message ?: "Could not open Minecraft"
+                                    }
+                                },
+                                shape = RoundedCornerShape(24.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF35B978))
+                            ) {
+                                Icon(Icons.Filled.PlayArrow, null)
+                                Text("PLAY")
+                            }
+                        }
+                        if (launchMessage.isNotBlank()) {
+                            Text(launchMessage, color = Color(0xFFB3C0CB), fontSize = 11.sp)
                         }
                     }
-                    Text(
-                        "BEDROCK EDITION",
-                        modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 23.sp
-                    )
                 }
-                Text("Minecraft for Android", color = TsiInk, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = if (status.installed) Color(0xFFE5F4EA) else Color(0xFFFFF1DF),
-                        shape = RoundedCornerShape(50)
-                    ) {
-                        Text(
-                            if (status.installed) "INSTALLED" else "NOT INSTALLED",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            color = if (status.installed) Color(0xFF28784F) else Color(0xFF9B641E),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
+            }
+            item {
+                Text("VERSION CHANNELS", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                Text(
+                    "Search official Android release channels. Install and update are handled by Google Play.",
+                    color = Color(0xFF9AAAB8),
+                    fontSize = 12.sp
+                )
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    listOf(
+                        BedrockChannel.ALL,
+                        BedrockChannel.VANILLA,
+                        BedrockChannel.PREVIEW,
+                        BedrockChannel.BETA
+                    ).forEach { channel ->
+                        FilterChip(
+                            selected = selectedChannel == channel,
+                            onClick = { selectedChannel = channel },
+                            label = { Text(channel.label) },
+                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF176A55),
+                                selectedLabelColor = Color.White,
+                                labelColor = Color(0xFFCAD5DE),
+                                containerColor = Color(0xFF17232D)
+                            )
                         )
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Text(status.versionName ?: status.message, color = TsiMuted, fontSize = 12.sp)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
+            }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(catalogMessage, color = Color(0xFF9AAAB8), fontSize = 11.sp, modifier = Modifier.weight(1f))
+                    TextButton(
                         onClick = {
-                            status = BedrockIntegration.readInstallStatus(context)
-                            launchMessage = ""
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEAF3F5)),
-                        shape = RoundedCornerShape(24.dp)
+                            // LaunchedEffect owns initial loading; tapping refresh reloads
+                            // the remote catalogue without blocking the UI thread.
+                            catalogMessage = "Refresh the Bedrock catalogue by reopening this edition tab."
+                        }
                     ) {
-                        Icon(Icons.Filled.Refresh, null, tint = TsiTealDark)
-                        Spacer(Modifier.width(5.dp))
-                        Text("CHECK", color = TsiTealDark)
-                    }
-                    Button(
-                        enabled = status.installed,
-                        onClick = {
-                            try {
-                                BedrockIntegration.launchInstalledGame(context)
-                                launchMessage = "Opening the installed Minecraft app…"
-                            } catch (error: Exception) {
-                                launchMessage = error.message ?: "Could not open Minecraft"
-                            }
-                        },
-                        shape = RoundedCornerShape(24.dp)
-                    ) {
-                        Icon(Icons.Filled.PlayArrow, null)
-                        Text("PLAY")
+                        Text(if (catalogLoading) "LOADING" else "CATALOG", color = Color(0xFF62D6A0), fontSize = 10.sp)
                     }
                 }
-                if (launchMessage.isNotBlank()) {
-                    Text(launchMessage, color = TsiMuted, fontSize = 11.sp)
+            }
+            if (filteredEntries.isEmpty()) {
+                item {
+                    Text("No matching Bedrock channel found.", color = Color(0xFFCAD5DE), modifier = Modifier.padding(18.dp))
+                }
+            }
+            items(filteredEntries, key = { it.id }) { entry ->
+                BedrockVersionCard(entry = entry) {
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.actionUrl)))
+                    } catch (error: Exception) {
+                        launchMessage = error.message ?: "Could not open the official store page."
+                    }
+                }
+            }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D))
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("About older Bedrock builds", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Bedrock Android does not publish a public snapshot archive like Java Edition. TSI will not mirror signed game APKs or offer unofficial downgrade packages. Older builds can also conflict with worlds, signatures and online services.",
+                            color = Color(0xFF9AAAB8),
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
         }
-        Text(
-            "TSI opens the official app already installed on this device. Bedrock game files and signed APKs are not copied or modified.",
-            color = TsiMuted,
-            fontSize = 11.sp
-        )
+    }
+}
+
+@Composable
+private fun BedrockVersionCard(
+    entry: BedrockVersionEntry,
+    onAction: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D)),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    entry.name,
+                    modifier = Modifier.weight(1f),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+                Surface(
+                    color = when (entry.channel) {
+                        BedrockChannel.VANILLA -> Color(0xFF194A37)
+                        BedrockChannel.PREVIEW -> Color(0xFF3B3264)
+                        BedrockChannel.BETA -> Color(0xFF65421E)
+                        BedrockChannel.ALL -> Color(0xFF263642)
+                    },
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text(
+                        entry.badge,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp
+                    )
+                }
+            }
+            Text(entry.versionLabel, color = Color(0xFF62D6A0), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(entry.description, color = Color(0xFFB3C0CB), fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.PhoneAndroid, contentDescription = null, tint = Color(0xFF9AAAB8), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(entry.sizeLabel, color = Color(0xFF9AAAB8), fontSize = 11.sp, modifier = Modifier.weight(1f))
+            }
+            Button(
+                onClick = onAction,
+                enabled = entry.enabled,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF176A55))
+            ) {
+                Icon(Icons.Filled.Download, null)
+                Spacer(Modifier.width(7.dp))
+                Text(entry.actionLabel)
+            }
+        }
     }
 }
 
