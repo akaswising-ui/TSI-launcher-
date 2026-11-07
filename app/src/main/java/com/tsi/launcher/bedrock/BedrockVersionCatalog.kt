@@ -1,8 +1,6 @@
 package com.tsi.launcher.bedrock
 
-import android.content.Context
 import org.json.JSONArray
-import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,54 +26,67 @@ data class BedrockVersionEntry(
 )
 
 object BedrockVersionCatalog {
-    // The JSON is version metadata only. Game binaries remain distributed and
-    // installed by the official Google Play / Minecraft channels.
+    // Metadata only. Google Play owns game binary delivery and signature validation.
     private const val CATALOG_URL =
         "https://raw.githubusercontent.com/akaswising-ui/TSI-launcher-/main/bedrock/versions.json"
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val READ_TIMEOUT_MS = 8_000
+    private val allowedHosts = setOf(
+        "play.google.com",
+        "help.minecraft.net",
+        "www.minecraft.net"
+    )
 
-    suspend fun fetch(context: Context): List<BedrockVersionEntry> =
-        withContext(Dispatchers.IO) {
-            val connection = (URL(CATALOG_URL).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "TSI-Launcher-Android")
-            }
-            try {
-                if (connection.responseCode !in 200..299) {
-                    throw IllegalStateException("Catalog server returned HTTP ${connection.responseCode}")
-                }
-                val json = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                parse(JSONArray(json))
-            } finally {
-                connection.disconnect()
-            }
+    suspend fun fetch(): List<BedrockVersionEntry> = withContext(Dispatchers.IO) {
+        val connection = (URL(CATALOG_URL).openConnection() as java.net.HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = CONNECT_TIMEOUT_MS
+            readTimeout = READ_TIMEOUT_MS
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("User-Agent", "TSI-Launcher-Android")
         }
+        try {
+            if (connection.responseCode !in 200..299) {
+                throw IllegalStateException("Catalog server returned HTTP ${connection.responseCode}")
+            }
+            val json = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            parse(JSONArray(json))
+        } finally {
+            connection.disconnect()
+        }
+    }
 
     fun parse(array: JSONArray): List<BedrockVersionEntry> {
         val entries = ArrayList<BedrockVersionEntry>(array.length())
+        val seenIds = HashSet<String>()
         for (index in 0 until array.length()) {
             val item = array.getJSONObject(index)
-            val channel = runCatching {
-                BedrockChannel.valueOf(item.getString("channel").uppercase())
-            }.getOrElse { BedrockChannel.VANILLA }
-            val url = item.optString("actionUrl")
-            if (!url.startsWith("https://play.google.com/") &&
-                !url.startsWith("https://www.minecraft.net/")) {
+            val id = item.optString("id").trim()
+            if (id.isBlank() || !seenIds.add(id)) continue
+
+            val channelName = item.optString("channel").uppercase()
+            val channel = BedrockChannel.values().firstOrNull {
+                it.name == channelName && it != BedrockChannel.ALL
+            } ?: continue
+
+            val url = item.optString("actionUrl").trim()
+            val parsedUrl = runCatching { URL(url) }.getOrNull() ?: continue
+            if (parsedUrl.protocol != "https" || parsedUrl.host.lowercase() !in allowedHosts) {
                 continue
             }
+
+            val name = item.optString("name").trim()
+            if (name.isBlank()) continue
+
             entries += BedrockVersionEntry(
-                id = item.getString("id"),
-                name = item.getString("name"),
+                id = id,
+                name = name,
                 channel = channel,
                 badge = item.optString("badge", channel.label),
                 versionLabel = item.optString("versionLabel", "Managed by official channel"),
                 sizeLabel = item.optString("sizeLabel", "Size shown by Google Play"),
                 description = item.optString("description"),
-                actionLabel = item.optString("actionLabel", "Open official page"),
+                actionLabel = item.optString("actionLabel", "Open official information"),
                 actionUrl = url,
                 enabled = item.optBoolean("enabled", true)
             )
@@ -89,33 +100,33 @@ object BedrockVersionCatalog {
             name = "Minecraft Bedrock for Android",
             channel = BedrockChannel.VANILLA,
             badge = "STABLE",
-            versionLabel = "Latest stable release",
-            sizeLabel = "Size shown by Google Play",
-            description = "Install and update the licensed game through Google Play.",
+            versionLabel = "Installed package: com.mojang.minecraftpe",
+            sizeLabel = "Install size shown by Google Play",
+            description = "The official stable Android app. TSI detects its installed version and can launch it.",
             actionLabel = "OPEN GOOGLE PLAY",
             actionUrl = "https://play.google.com/store/apps/details?id=com.mojang.minecraftpe"
+        ),
+        BedrockVersionEntry(
+            id = "beta",
+            name = "Minecraft Android Beta",
+            channel = BedrockChannel.BETA,
+            badge = "BETA TRACK",
+            versionLabel = "Uses the same Android app package as Stable",
+            sizeLabel = "Update size shown by Google Play",
+            description = "Joining Beta replaces the normal Minecraft client. Android does not install Stable and Beta side-by-side.",
+            actionLabel = "OPEN BETA ENROLLMENT",
+            actionUrl = "https://play.google.com/apps/testing/com.mojang.minecraftpe"
         ),
         BedrockVersionEntry(
             id = "preview",
             name = "Minecraft Preview",
             channel = BedrockChannel.PREVIEW,
-            badge = "PREVIEW",
-            versionLabel = "Latest available preview",
-            sizeLabel = "Size shown by Google Play",
-            description = "Availability depends on region and the official Preview rollout.",
-            actionLabel = "CHECK PREVIEW",
-            actionUrl = "https://play.google.com/store/apps/details?id=com.mojang.minecraftpreview"
-        ),
-        BedrockVersionEntry(
-            id = "beta",
-            name = "Android Beta Program",
-            channel = BedrockChannel.BETA,
-            badge = "BETA",
-            versionLabel = "Current Play testing channel",
-            sizeLabel = "Managed by Google Play",
-            description = "Join or leave the official testing track using the Google account that owns Minecraft.",
-            actionLabel = "OPEN BETA PROGRAM",
-            actionUrl = "https://play.google.com/apps/testing/com.mojang.minecraftpe"
+            badge = "NOT A SEPARATE ANDROID APP",
+            versionLabel = "Android development builds use the Beta track",
+            sizeLabel = "No separate Android package",
+            description = "Mojang's mobile documentation describes Beta enrollment on Android. The separate Preview app flow is not offered as an Android package.",
+            actionLabel = "ANDROID BETA / PREVIEW INFO",
+            actionUrl = "https://help.minecraft.net/hc/en-us/articles/4423653831821"
         )
     )
 }
