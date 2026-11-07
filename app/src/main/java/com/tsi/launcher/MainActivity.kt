@@ -874,7 +874,7 @@ private fun FeaturedVersionCard(
                     Text("OPEN VIRTUAL MACHINE CONTROLLER", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
                 Text(
-                    "Downloads open the VM Controller automatically. The Android JVM/LWJGL game engine still needs integration before Java games can start.",
+                    "Downloads open the VM Controller automatically. It checks the selected Android JRE, Minecraft libraries, assets and the embedded Amethyst game engine before launch.",
                     color = TsiMuted,
                     fontSize = 11.sp
                 )
