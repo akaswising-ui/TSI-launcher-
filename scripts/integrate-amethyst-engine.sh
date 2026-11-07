@@ -297,12 +297,12 @@ menu_button = (
 )
 for layout_path in (main_menu_layout_path, main_menu_land_layout_path):
     layout = layout_path.read_text()
-    layout = replace_once(
-        layout,
-        '                app:layout_constraintTop_toBottomOf="@id/share_logs_button" />',
-        '                app:layout_constraintTop_toBottomOf="@id/share_logs_button" />\n\n' + menu_button,
-        f"TSI Java dashboard button in {layout_path.name}",
-    )
+    anchor = 'app:layout_constraintTop_toBottomOf="@id/share_logs_button" />'
+    if layout.count(anchor) != 1:
+        raise SystemExit(
+            f"Expected one share-logs button anchor in {layout_path.name}; found {layout.count(anchor)}"
+        )
+    layout = layout.replace(anchor, anchor + "\\n\\n" + menu_button, 1)
     layout_path.write_text(layout)
 PY
 
