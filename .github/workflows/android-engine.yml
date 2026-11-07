@@ -121,8 +121,8 @@ jobs:
               "STABLE AND BETA SHARE ONE ANDROID APP",
               "VERSION HISTORY",
               "Installed version detected",
-              "Last selected Android channel:",
-              "No separate Android Preview app",
+              "Last selected Android channel: ",
+              "The separate Minecraft Preview app is not an independently installed Android client.",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
