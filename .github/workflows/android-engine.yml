@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -144,27 +144,3 @@ jobs:
             out/TSI-Launcher-engine-debug.apk.sha256
           if-no-files-found: error
           retention-days: 90
-
-      - name: Publish direct APK download on GitHub Releases
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          APK_PATH: out/TSI-Launcher-engine-debug.apk
-          SHA_PATH: out/TSI-Launcher-engine-debug.apk.sha256
-          RELEASE_TAG: android-engine-debug-latest
-        shell: bash
-        run: |
-          # Keep the stable download tag pinned to the exact source commit that built this APK.
-          git tag --force "$RELEASE_TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$RELEASE_TAG" --force
-
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$APK_PATH" "$SHA_PATH" --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$RELEASE_TAG" "$APK_PATH" "$SHA_PATH" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "TSI Launcher Android Engine Debug APK" \
-              --notes "TSI Launcher Compose UI integrated with the pinned Amethyst Android Java engine. Debug build for testing; Java engine and native renderer included." \
-              --prerelease \
-              --target "$GITHUB_SHA"
-          fi
