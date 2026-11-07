@@ -185,6 +185,13 @@ main_activity = replace_once(
 main_activity_path.write_text(main_activity)
 
 manifest = manifest_path.read_text()
+manifest = replace_once(
+    manifest,
+    '    <uses-permission android:name="android.permission.INTERNET" />',
+    '    <uses-permission android:name="android.permission.INTERNET" />\\n'
+    '    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />',
+    "optional all-files access permission",
+)
 test_marker = '<activity\n            android:name=".TestStorageActivity"'
 start = manifest.find(test_marker)
 if start < 0:
