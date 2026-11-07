@@ -6,7 +6,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="TSI Launcher"
+        android:label="TSI Dashboard Shell (Not for Gameplay)"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
