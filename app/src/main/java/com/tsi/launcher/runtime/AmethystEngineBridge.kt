@@ -198,8 +198,6 @@ object AmethystEngineBridge {
         ) {
             "Java ${runtime.majorVersion} is not installed in Amethyst's MultiRT folder. Return to VM Controller and install a compatible Android JRE."
         }
-        activateAmethystRuntime(context, runtime.name, runtime.majorVersion)
-
         val externalRoot = context.getExternalFilesDir(null)
             ?: throw IOException("Amethyst external app storage is unavailable.")
         val minecraftRoot = File(externalRoot, ".minecraft")
@@ -230,6 +228,12 @@ object AmethystEngineBridge {
             versionId = safeVersion,
             runtimeName = runtime.name,
             playerName = safePlayer,
+            heapMb = heapMb.toInt().coerceIn(512, 16384)
+        )
+        activateAmethystRuntime(
+            context = context,
+            runtimeName = runtime.name,
+            expectedMajor = runtime.majorVersion,
             heapMb = heapMb.toInt().coerceIn(512, 16384)
         )
 
@@ -335,10 +339,9 @@ object AmethystEngineBridge {
             throw IOException("Could not persist Amethyst's selected runtime and profile preferences.")
         }
 
-        activateAmethystRuntime(context, runtimeName, heapMb)
     }
 
-    private fun activateAmethystRuntime(context: Context, runtimeName: String, expectedMajor: Int) {
+    private fun activateAmethystRuntime(context: Context, runtimeName: String, expectedMajor: Int, heapMb: Int) {
         try {
             val runtimeRoot = File(context.filesDir.parentFile ?: context.filesDir, "runtimes")
             val expectedHome = File(runtimeRoot, runtimeName)
