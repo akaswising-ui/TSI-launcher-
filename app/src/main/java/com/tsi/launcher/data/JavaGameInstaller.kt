@@ -317,6 +317,7 @@ class JavaGameInstaller(
         try {
             val code = connection.responseCode
             if (code !in 200..299) throw IOException("Metadata request failed: HTTP $code")
+            validateUrl(connection.url.toURI().toString())
             return connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
             connection.disconnect()
@@ -442,8 +443,20 @@ class JavaGameInstaller(
     }
 
     private fun replaceAtomically(source: File, target: File) {
-        if (target.exists() && !target.delete()) throw IOException("Cannot replace ${target.name}")
-        if (!source.renameTo(target)) throw IOException("Cannot finalize ${target.name}")
+        try {
+            java.nio.file.Files.move(
+                source.toPath(),
+                target.toPath(),
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+            )
+        } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+            java.nio.file.Files.move(
+                source.toPath(),
+                target.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+            )
+        }
     }
 
     private fun ensureDirectory(directory: File) {

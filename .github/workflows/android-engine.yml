@@ -89,6 +89,33 @@ jobs:
           apk = ".build/Amethyst-Android/app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk"
           dex_strings = set()
           with zipfile.ZipFile(apk) as archive:
+              apk_entries = set(archive.namelist())
+              required_assets = [
+                  "assets/default.json",
+                  "assets/components/lwjgl3/3.3.3/lwjgl.jar",
+                  "assets/components/lwjgl3/3.3.3/lwjgl-3.3.3-merged-modules.jar",
+                  "assets/components/lwjgl3/3.3.3/lwjgl-lwjglx.jar",
+                  "assets/components/lwjgl3/3.3.3/lwjgl-openal.jar",
+                  "assets/components/lwjgl3/3.4.1/lwjgl.jar",
+                  "assets/components/lwjgl3/3.4.1/lwjgl-3.4.1-merged-modules.jar",
+                  "assets/components/lwjgl3/3.4.1/lwjgl-lwjglx.jar",
+                  "assets/components/lwjgl3/3.4.1/lwjgl-openal.jar",
+              ]
+              missing_assets = [name for name in required_assets if name not in apk_entries]
+              if missing_assets:
+                  raise SystemExit("Amethyst LWJGL/control assets missing from APK: " + ", ".join(missing_assets))
+
+              required_native = {"libpojavexec.so", "libpojavexec_awt.so", "libexithook.so"}
+              natives_by_abi = {}
+              for name in apk_entries:
+                  parts = name.split("/")
+                  if len(parts) == 3 and parts[0] == "lib":
+                      natives_by_abi.setdefault(parts[1], set()).add(parts[2])
+              usable_abis = [abi for abi, libs in natives_by_abi.items()
+                             if required_native.issubset(libs)]
+              if not usable_abis:
+                  raise SystemExit("APK has no ABI containing all Amethyst JVM/native host libraries.")
+
               dex_files = [name for name in archive.namelist()
                            if name.startswith("classes") and name.endswith(".dex")]
               if not dex_files:

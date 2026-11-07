@@ -1386,7 +1386,7 @@ private fun SettingsScreen(
                     }
                 }
                 Text(
-                    "The chosen runtime will be checked against the selected Minecraft version once the JVM engine is connected.",
+                    "The selected Java runtime is checked against the Minecraft version before launch. TSI automatically chooses an installed compatible runtime when the preference is too old.",
                     color = TsiMuted,
                     fontSize = 11.sp
                 )

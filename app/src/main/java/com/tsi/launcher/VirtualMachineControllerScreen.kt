@@ -190,7 +190,7 @@ fun VirtualMachineControllerScreen(
                 if (runtimes.isEmpty()) {
                     Text("No compatible Android JRE detected.", color = VmAmber, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "TSI checks Android OpenJDK runtimes under .minecraft/runtimes. A desktop Java install is not an Android JVM.",
+                        "TSI installs Android OpenJDK runtimes in the same app-data runtime folder used by Amethyst. A desktop Java install is not an Android JVM.",
                         color = VmMuted,
                         fontSize = 11.sp
                     )
@@ -216,14 +216,15 @@ fun VirtualMachineControllerScreen(
                 val neededJava = inspection?.requiredJavaMajor
                 val isNeededRuntimeInstalled = neededJava != null &&
                     runtimes.any { it.majorVersion >= neededJava }
-                if (neededJava != null && neededJava in listOf(8, 17, 21, 25) && !isNeededRuntimeInstalled) {
+                val installableJava = neededJava?.let(jreInstaller::recommendedRuntimeMajor)
+                if (neededJava != null && installableJava != null && !isNeededRuntimeInstalled) {
                     Button(
                         onClick = {
                             scope.launch {
                                 installingRuntime = true
-                                runtimeInstallMessage = "Preparing Java $neededJava download…"
+                                runtimeInstallMessage = "Preparing Java $installableJava download…"
                                 try {
-                                    jreInstaller.downloadAndInstall(neededJava) { update ->
+                                    jreInstaller.downloadAndInstall(installableJava) { update ->
                                         withContext(Dispatchers.Main.immediate) {
                                             runtimeInstallMessage = update
                                         }
@@ -231,7 +232,7 @@ fun VirtualMachineControllerScreen(
                                     inspection = withContext(Dispatchers.IO) {
                                         manager.inspect(versionId, runtimePreference)
                                     }
-                                    runtimeInstallMessage = "Java $neededJava installed. Refresh the checklist."
+                                    runtimeInstallMessage = "Java $installableJava installed. Rechecking the selected version."
                                 } catch (error: Exception) {
                                     runtimeInstallMessage = "Runtime install failed: ${error.message ?: "unknown error"}"
                                 } finally {
@@ -245,7 +246,7 @@ fun VirtualMachineControllerScreen(
                     ) {
                         Icon(Icons.Filled.Download, null)
                         Spacer(Modifier.width(7.dp))
-                        Text(if (installingRuntime) "INSTALLING JAVA $neededJava…" else "DOWNLOAD & INSTALL JAVA $neededJava")
+                        Text(if (installingRuntime) "INSTALLING JAVA $installableJava…" else if (installableJava == neededJava) "DOWNLOAD & INSTALL JAVA $installableJava" else "INSTALL JAVA $installableJava (FOR JAVA $neededJava)")
                     }
                 }
 
@@ -276,7 +277,12 @@ fun VirtualMachineControllerScreen(
                     current != null && current.libraryCount > 0 && current.installedLibraryCount >= current.libraryCount
                 )
                 RequirementRow("Asset index", current?.assetIndexExists == true)
-                RequirementRow("Asset objects", (current?.assetObjectCount ?: 0) > 0)
+                RequirementRow(
+                    "Asset objects (" + (current?.assetObjectCount ?: 0) + "/" +
+                        (current?.assetObjectTotal ?: 0) + ")",
+                    current != null && current.assetObjectTotal > 0 &&
+                        current.assetObjectCount >= current.assetObjectTotal
+                )
                 RequirementRow("Android JVM + LWJGL engine", current?.engineBridgeAvailable == true)
             }
         }
