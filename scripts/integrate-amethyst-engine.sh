@@ -23,6 +23,7 @@ app_gradle = root / "app_pojavlauncher/build.gradle"
 manifest_path = root / "app_pojavlauncher/src/main/AndroidManifest.xml"
 application_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/PojavApplication.java"
 main_activity_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/MainActivity.java"
+launcher_activity_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/LauncherActivity.java"
 profile_type_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/ProfileTypeSelectFragment.java"
 
 def replace_once(text: str, old: str, new: str, description: str) -> str:
@@ -209,6 +210,34 @@ profile_type = replace_once(
     "offline-compatible profile creation gate",
 )
 profile_type_path.write_text(profile_type)
+
+launcher_source = launcher_activity_path.read_text()
+original_resume = """    protected void onResume() {
+        super.onResume();
+        ContextExecutor.setActivity(this);
+        mInstallTracker.attach();
+    }"""
+auto_launch_resume = """    protected void onResume() {
+        super.onResume();
+        ContextExecutor.setActivity(this);
+        mInstallTracker.attach();
+
+        // TSI launches through Amethyst's normal launcher pipeline. This
+        // preserves profile validation, downloader setup, memory warnings,
+        // per-version natives, LWJGL selection and crash mitigations.
+        if (getIntent().getBooleanExtra("tsi_auto_launch", false)) {
+            getIntent().removeExtra("tsi_auto_launch");
+            getWindow().getDecorView().post(() ->
+                    ExtraCore.setValue(ExtraConstants.LAUNCH_GAME, true));
+        }
+    }"""
+launcher_source = replace_once(
+    launcher_source,
+    original_resume,
+    auto_launch_resume,
+    "Amethyst normal game-launch handoff",
+)
+launcher_activity_path.write_text(launcher_source)
 
 manifest = manifest_path.read_text()
 manifest = replace_once(
