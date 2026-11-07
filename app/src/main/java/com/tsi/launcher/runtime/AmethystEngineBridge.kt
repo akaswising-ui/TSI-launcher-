@@ -181,6 +181,7 @@ object AmethystEngineBridge {
         runtime: DetectedJavaRuntime,
         playerName: String
     ) {
+        ensureDefaultControlMap(context)
         val safeVersion = versionId.trim()
         require(safeVersion.matches(Regex("[A-Za-z0-9._+\\-]{1,100}"))) {
             "Invalid Minecraft version identifier."
@@ -197,6 +198,7 @@ object AmethystEngineBridge {
         ) {
             "Java ${runtime.majorVersion} is not installed in Amethyst's MultiRT folder. Return to VM Controller and install a compatible Android JRE."
         }
+        activateAmethystRuntime(context, runtime.name, runtime.majorVersion)
 
         val externalRoot = context.getExternalFilesDir(null)
             ?: throw IOException("Amethyst external app storage is unavailable.")
@@ -333,6 +335,50 @@ object AmethystEngineBridge {
             throw IOException("Could not persist Amethyst's selected runtime and profile preferences.")
         }
 
+        activateAmethystRuntime(context, runtimeName, heapMb)
+    }
+
+    private fun activateAmethystRuntime(context: Context, runtimeName: String, expectedMajor: Int) {
+        try {
+            val runtimeRoot = File(context.filesDir.parentFile ?: context.filesDir, "runtimes")
+            val expectedHome = File(runtimeRoot, runtimeName)
+            val toolsClass = Class.forName("net.kdt.pojavlaunch.Tools")
+            val configuredRoot = toolsClass.getField("MULTIRT_HOME").get(null) as? String
+            if (!configuredRoot.isNullOrBlank() &&
+                File(configuredRoot).canonicalFile != runtimeRoot.canonicalFile
+            ) {
+                throw IOException("Amethyst MultiRT path does not match TSI's installed runtime folder.")
+            }
+
+            val multiRtClass = Class.forName("net.kdt.pojavlaunch.multirt.MultiRTUtils")
+            val selectedRuntime = multiRtClass
+                .getMethod("forceReread", String::class.java)
+                .invoke(null, runtimeName)
+                ?: throw IOException("Amethyst could not read the selected Java runtime.")
+
+            val actualMajor = selectedRuntime.javaClass.getField("javaVersion").getInt(selectedRuntime)
+            val versionString = selectedRuntime.javaClass.getField("versionString")
+                .get(selectedRuntime) as? String
+            if (actualMajor != expectedMajor || versionString.isNullOrBlank() ||
+                !File(expectedHome, "release").isFile
+            ) {
+                throw IOException(
+                    "Amethyst MultiRT cannot recognize Java $expectedMajor in " +
+                        expectedHome.absolutePath + ". Runtime metadata is invalid or incomplete."
+                )
+            }
+
+            val preferencesClass = Class.forName("net.kdt.pojavlaunch.prefs.LauncherPreferences")
+            preferencesClass.getField("PREF_DEFAULT_RUNTIME").set(null, runtimeName)
+            preferencesClass.getField("PREF_RAM_ALLOCATION").setInt(null, heapMb)
+        } catch (error: IOException) {
+            throw error
+        } catch (error: Exception) {
+            throw IOException(
+                "Could not activate Java $expectedMajor in Amethyst's runtime selector.",
+                error
+            )
+        }
     }
 
     private fun writeAtomically(destination: File, content: String) {
