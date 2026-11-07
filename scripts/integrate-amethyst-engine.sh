@@ -230,8 +230,17 @@ auto_launch_resume = """    protected void onResume() {
         // per-version natives, LWJGL selection and crash mitigations.
         if (getIntent().getBooleanExtra("tsi_auto_launch", false)) {
             getIntent().removeExtra("tsi_auto_launch");
-            getWindow().getDecorView().post(() ->
-                    ExtraCore.setValue(ExtraConstants.LAUNCH_GAME, true));
+            getWindow().getDecorView().post(() -> {
+                // MainMenuFragment loads launcher_profiles.json from its
+                // lifecycle callback. Reload synchronously as a safeguard so
+                // the launch listener cannot race that fragment callback.
+                try {
+                    LauncherProfiles.load();
+                } catch (RuntimeException error) {
+                    android.util.Log.e("TSI Launcher", "Could not load the selected game profile.", error);
+                }
+                ExtraCore.setValue(ExtraConstants.LAUNCH_GAME, true);
+            });
         }
     }"""
 launcher_source = replace_once(

@@ -38,9 +38,12 @@ data class VersionVmInspection(
 /**
  * Inspects the app-specific Java runtime layout used by TSI.
  *
- * Runtime directory contract:
- * .minecraft/runtimes/<runtime-name>/release
- * .minecraft/runtimes/<runtime-name>/lib/server/libjvm.so
+ * Runtime directory contract used by Amethyst MultiRT:
+ * <app-data>/runtimes/<runtime-name>/release
+ * <app-data>/runtimes/<runtime-name>/lib/server/libjvm.so
+ *
+ * Minecraft files remain under <external-files>/.minecraft; JRE files are
+ * kept separately in Amethyst's app-private MultiRT directory.
  *
  * A detected JRE is not by itself an Android Minecraft engine. The JNI/JVM,
  * LWJGL, renderer, surface and input bridge must also be linked.
