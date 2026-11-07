@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -144,3 +144,42 @@ jobs:
             out/TSI-Launcher-engine-debug.apk.sha256
           if-no-files-found: error
           retention-days: 90
+
+      - name: Verify packaged app identity and original Pojav launcher entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=out/TSI-Launcher-engine-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/36.1.0/aapt"
+          test -x "$AAPT"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          grep -F "package: name='com.tsi.launcher'" <<< "$BADGING"
+          grep -F "launchable-activity: name='net.kdt.pojavlaunch.TestStorageActivity'" <<< "$BADGING"
+          if grep -F "launchable-activity: name='com.tsi.launcher.MainActivity'" <<< "$BADGING"; then
+            echo "TSI dashboard must not replace the original Pojav launcher entry."
+            exit 1
+          fi
+
+      - name: Publish engine APK as the direct Java Edition download
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: android-debug-latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=out/TSI-Launcher-engine-debug.apk
+          SHA=out/TSI-Launcher-engine-debug.apk.sha256
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK#app-debug.apk" "$SHA" --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$RELEASE_TAG" --title "TSI Launcher Java Edition Engine APK" \
+              --notes "Engine-integrated Java Edition APK. Includes the Amethyst Android JVM/game host. The original Pojav launcher home remains the app entry screen. Debug build for testing." \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" "$APK#app-debug.apk" "$SHA" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "TSI Launcher Java Edition Engine APK" \
+              --notes "Engine-integrated Java Edition APK. Includes the Amethyst Android JVM/game host. The original Pojav launcher home remains the app entry screen. Debug build for testing." \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
