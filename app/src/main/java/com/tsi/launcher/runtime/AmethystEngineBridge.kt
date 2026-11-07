@@ -104,6 +104,7 @@ object AmethystEngineBridge {
         context: Context,
         progress: suspend (String) -> Unit
     ) {
+        ensureDefaultControlMap(context)
         progress("Preparing Amethyst SDL, LWJGL, graphics, audio and input components…")
         val assetManager = Class.forName("net.kdt.pojavlaunch.tasks.AsyncAssetManager")
         assetManager.getMethod("unpackComponents", Context::class.java).invoke(null, context)
@@ -139,8 +140,14 @@ object AmethystEngineBridge {
         require(runtime.name.matches(Regex("[A-Za-z0-9._+\\-]{1,80}"))) {
             "Invalid Android runtime name."
         }
-        require(runtime.jvmLibrary.isFile && File(runtime.home, "release").isFile) {
-            "The selected Android JRE is incomplete."
+        val amethystRuntimeRoot = File(context.filesDir.parentFile ?: context.filesDir, "runtimes")
+        val amethystRuntimeHome = File(amethystRuntimeRoot, runtime.name)
+        require(
+            amethystRuntimeHome.canonicalFile == runtime.home.canonicalFile &&
+                File(amethystRuntimeHome, "release").isFile &&
+                runtime.jvmLibrary.isFile
+        ) {
+            "Java ${runtime.majorVersion} is not installed in Amethyst's MultiRT folder. Return to VM Controller and install a compatible Android JRE."
         }
 
         val externalRoot = context.getExternalFilesDir(null)
@@ -184,6 +191,46 @@ object AmethystEngineBridge {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(launchIntent)
+    }
+
+    /**
+     * Amethyst loads controls from <external-files>/controlmap/default.json.
+     * Its default layout is bundled in the APK assets, but a fresh TSI install
+     * does not have the external file yet. Copy it once without replacing a
+     * user's existing custom/default layout.
+     */
+    private fun ensureDefaultControlMap(context: Context) {
+        val gameRoot = context.getExternalFilesDir(null)
+            ?: throw IOException("Amethyst external app storage is unavailable.")
+        val controlDirectory = File(gameRoot, "controlmap")
+        val destination = File(controlDirectory, "default.json")
+        if (destination.isFile && destination.length() > 0L) return
+
+        if (!controlDirectory.exists() && !controlDirectory.mkdirs()) {
+            throw IOException("Could not create Amethyst's controlmap directory.")
+        }
+
+        val temporary = File(controlDirectory, "default.json.tmp")
+        try {
+            context.assets.open("default.json").use { input ->
+                FileOutputStream(temporary).use { output ->
+                    input.copyTo(output)
+                    output.fd.sync()
+                }
+            }
+            if (!temporary.isFile || temporary.length() == 0L) {
+                throw IOException("Amethyst's bundled default control layout is empty.")
+            }
+            if (destination.exists() && !destination.delete()) {
+                throw IOException("Could not replace the empty default control layout.")
+            }
+            if (!temporary.renameTo(destination)) {
+                throw IOException("Could not install Amethyst's default control layout.")
+            }
+        } catch (error: Exception) {
+            temporary.delete()
+            throw IOException("Failed to initialize Amethyst's default touch controls.", error)
+        }
     }
 
     private fun writeAmethystProfile(
