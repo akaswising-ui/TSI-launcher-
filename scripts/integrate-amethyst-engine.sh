@@ -18,6 +18,7 @@ import sys
 
 root = Path(sys.argv[1])
 root_gradle = root / "build.gradle"
+gradle_properties = root / "gradle.properties"
 app_gradle = root / "app_pojavlauncher/build.gradle"
 manifest_path = root / "app_pojavlauncher/src/main/AndroidManifest.xml"
 application_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/PojavApplication.java"
@@ -37,6 +38,19 @@ text = replace_once(
     "root Kotlin plugin insertion",
 )
 root_gradle.write_text(text)
+
+# Amethyst upstream opts out of AGP 9 built-in Kotlin, which means the TSI
+# Compose .kt sources are silently omitted from the engine APK. Re-enable the
+# AGP-provided Kotlin compiler; do not add kotlin-android, which conflicts with
+# AGP 9 built-in Kotlin.
+text = gradle_properties.read_text()
+text = replace_once(
+    text,
+    "android.builtInKotlin=false",
+    "android.builtInKotlin=true",
+    "AGP built-in Kotlin enablement for TSI Compose sources",
+)
+gradle_properties.write_text(text)
 
 text = app_gradle.read_text()
 text = replace_once(
