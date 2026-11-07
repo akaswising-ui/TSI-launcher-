@@ -111,18 +111,14 @@ jobs:
 
           required = [
               "Lcom/tsi/launcher/MainActivity;",
-              "Lcom/tsi/launcher/bedrock/BedrockVersionHistoryStore;",
+              "Lcom/tsi/launcher/runtime/AmethystEngineBridge;",
+              "Lcom/tsi/launcher/runtime/DevicePerformanceProfile;",
               "Account manager",
               "Offline username",
               "Continue with Microsoft",
               "Create a free Microsoft account",
               "File Manager access",
               "OPEN FILE ACCESS SETTINGS",
-              "STABLE AND BETA SHARE ONE ANDROID APP",
-              "VERSION HISTORY",
-              "Installed version detected",
-              "Last selected Android channel: ",
-              "Android Bedrock uses the in-place Beta track. There is no separate Preview app package on Android.",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
