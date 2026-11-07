@@ -95,7 +95,7 @@ jobs:
                   raise SystemExit("Engine APK contains no DEX files.")
               for dex_name in dex_files:
                   dex = archive.read(dex_name)
-                  if len(dex) < 112 or not dex.startswith(b"dex\\n"):
+                  if len(dex) < 112 or not dex.startswith(b"dex\n"):
                       raise SystemExit(f"Invalid DEX file: {dex_name}")
                   string_count, string_offset = struct.unpack_from("<II", dex, 56)
                   for index in range(string_count):
@@ -104,7 +104,7 @@ jobs:
                       while dex[cursor] & 0x80:
                           cursor += 1
                       cursor += 1
-                      end = dex.find(b"\\0", cursor)
+                      end = dex.find(b"\0", cursor)
                       if end < 0:
                           raise SystemExit(f"Invalid DEX string table in {dex_name}")
                       dex_strings.add(dex[cursor:end].decode("utf-8", "replace"))
