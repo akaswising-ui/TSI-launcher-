@@ -113,6 +113,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tsi.launcher.bedrock.BedrockIntegration
 import com.tsi.launcher.data.JavaGameInstaller
+import com.tsi.launcher.runtime.AmethystEngineBridge
 import com.tsi.launcher.data.MinecraftVersion
 import com.tsi.launcher.data.VersionFilter
 import com.tsi.launcher.data.VersionManifestRepository
@@ -170,6 +171,7 @@ private fun TsiLauncherApp() {
     }
     var profileDialogOpen by remember { mutableStateOf(false) }
     var profileDraft by remember { mutableStateOf(profileName) }
+    var profileError by remember { mutableStateOf("") }
     var overflowOpen by remember { mutableStateOf(false) }
 
     suspend fun refreshVersions() {
@@ -364,6 +366,7 @@ private fun TsiLauncherApp() {
                                 profileName = profileName,
                                 onAddProfile = {
                                     profileDraft = profileName
+                                    profileError = ""
                                     profileDialogOpen = true
                                 },
                                 activeDownload = activeDownload,
@@ -434,38 +437,56 @@ private fun TsiLauncherApp() {
     if (profileDialogOpen) {
         AlertDialog(
             onDismissRequest = { profileDialogOpen = false },
-            title = { Text("Local player profile") },
+            title = { Text("Add Offline Account") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = profileDraft,
-                        onValueChange = { profileDraft = it },
-                        label = { Text("Profile name") },
-                        singleLine = true
+                        onValueChange = {
+                            profileDraft = it
+                            profileError = ""
+                        },
+                        label = { Text("Offline username") },
+                        singleLine = true,
+                        isError = profileError.isNotBlank()
                     )
                     Text(
-                        "Local profile label only. Microsoft account login is not connected yet.",
+                        "Use 3–16 letters, numbers or underscores. This creates a local account without Microsoft sign-in.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TsiMuted
                     )
+                    if (profileError.isNotBlank()) {
+                        Text(
+                            profileError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     val cleaned = profileDraft.trim()
-                    if (cleaned.isNotBlank()) {
-                        profileName = cleaned
-                        preferences.edit().putString("profile_name", cleaned).apply()
+                    if (!cleaned.matches(Regex("[A-Za-z0-9_]{3,16}"))) {
+                        profileError = "Username must be 3–16 characters: letters, numbers or underscore."
+                    } else {
+                        try {
+                            AmethystEngineBridge.addOfflineAccount(context.applicationContext, cleaned)
+                            profileName = cleaned
+                            preferences.edit().putString("profile_name", cleaned).apply()
+                            statusMessage = "Offline account '$cleaned' added and selected."
+                            profileDialogOpen = false
+                        } catch (error: Exception) {
+                            profileError = error.message ?: "Could not create the offline account."
+                        }
                     }
-                    profileDialogOpen = false
-                }) { Text("Save") }
+                }) { Text("Add account") }
             },
             dismissButton = {
                 TextButton(onClick = { profileDialogOpen = false }) { Text("Cancel") }
             }
         )
-    }
-}
+    }}
 
 @Composable
 private fun EditionTab(
