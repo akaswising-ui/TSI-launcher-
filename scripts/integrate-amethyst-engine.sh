@@ -218,7 +218,7 @@ profile_type_path.write_text(profile_type)
 # to Amethyst's generic Microsoft-ownership gate. This gate is not needed to
 # create a local profile or install a local loader profile.
 try_install_match = re.search(
-    r"private void tryInstall\\([^)]*\\)\\s*\\{(.*?)\\n    \\}",
+    r"private void tryInstall\([^)]*\)\s*\{(.*?)\n    \}",
     profile_type,
     flags=re.DOTALL,
 )
