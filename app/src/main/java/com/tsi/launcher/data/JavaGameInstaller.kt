@@ -110,32 +110,21 @@ class JavaGameInstaller(
                     extractAmethystNativeArchive(version.id, aarTarget)
                 }
 
-                if (artifact == null) {
-                    // Classifier-only native libraries are intentionally not copied:
-                    // desktop native binaries are not Android-compatible LWJGL natives.
-                    continue
-                }
-
-                val relativePath = artifact.optString("path")
-                val relativeUrl = artifact.optString("url")
-                val sha1 = artifact.optString("sha1")
-                    .takeIf { it.matches(Regex("[a-fA-F0-9]{40}")) }
-                val size = artifact.optLong("size", -1L)
-                if (relativePath.isBlank()) {
-                    throw IOException("Library metadata has no artifact path: ${library.optString("name")}")
-                }
-
-                val target = safeChild(paths.sharedLibrariesDirectory, relativePath)
+                // Before 1.13, Mojang's version JSON uses Maven coordinates in
+                // "name" and a repository URL instead of downloads.artifact.
+                // Skipping those entries silently left ASM/LaunchWrapper jars
+                // absent, causing VanillaTweaker to fail with ClassNotFoundError.
+                val resolvedArtifact = MinecraftLibraryResolver.resolve(library) ?: continue
+                val target = safeChild(paths.sharedLibrariesDirectory, resolvedArtifact.path)
                 totalLibraries++
-                if (!isVerifiedFile(target, sha1, size)) {
-                    val libraryBase = library.optString("url")
-                    val resolvedUrl = when {
-                        relativeUrl.isNotBlank() -> relativeUrl
-                        libraryBase.isNotBlank() -> libraryBase.trimEnd('/') + "/" + relativePath
-                        else -> throw IOException("Library has no download URL: ${library.optString("name")}")
-                    }
+                if (!isVerifiedFile(target, resolvedArtifact.sha1, resolvedArtifact.size)) {
                     progress("Downloading library ${installedLibraries + 1}/$totalLibraries…")
-                    downloadVerified(resolvedUrl, target, sha1, size)
+                    downloadVerified(
+                        resolvedArtifact.url,
+                        target,
+                        resolvedArtifact.sha1,
+                        resolvedArtifact.size
+                    )
                 }
                 installedLibraries++
             }
