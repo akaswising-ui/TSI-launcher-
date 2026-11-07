@@ -116,8 +116,17 @@ class JavaRuntimeManager(private val context: Context) {
             .removePrefix("Java")
             .trim()
             .toIntOrNull()
-        val targetMajor = requestedMajor ?: requiredMajor
-        val compatible = detected.firstOrNull { it.majorVersion == targetMajor }
+        val minimumMajor = requiredMajor ?: requestedMajor
+        val preferredMajor = requestedMajor?.takeIf {
+            requiredMajor == null || it >= requiredMajor
+        }
+        // Honor the selected runtime only when it meets the Minecraft version's
+        // minimum Java requirement. Otherwise use the lowest compatible runtime.
+        val compatible = preferredMajor?.let { preferred ->
+            detected.firstOrNull { it.majorVersion == preferred && it.majorVersion >= (requiredMajor ?: preferred) }
+        } ?: minimumMajor?.let { minimum ->
+            detected.firstOrNull { it.majorVersion >= minimum }
+        }
 
         val objectDirectory = File(assetsRoot, "objects")
         val objectCount = objectDirectory.listFiles()?.count { it.isDirectory } ?: 0
@@ -127,8 +136,8 @@ class JavaRuntimeManager(private val context: Context) {
             if (!clientJar.isFile) add("Client JAR is missing for $safeId.")
             if (!metadataFile.isFile) add("Version metadata JSON is missing.")
             if (requiredMajor == null) add("Java major version could not be resolved from version metadata.")
-            if (targetMajor != null && compatible == null) {
-                add("No Android JRE for Java $targetMajor is installed in TSI's runtimes folder.")
+            if (minimumMajor != null && compatible == null) {
+                add("No Amethyst-compatible Android JRE for Java $minimumMajor or newer is installed in the MultiRT runtimes folder.")
             }
             if (libraryCount == 0 || installedLibraryCount < libraryCount) {
                 add("Minecraft libraries are incomplete ($installedLibraryCount/$libraryCount).")
@@ -163,47 +172,42 @@ class JavaRuntimeManager(private val context: Context) {
 
     private fun scanRuntimes(): List<DetectedJavaRuntime> {
         migrateLegacyRuntimes()
-        val entries = (listOf(amethystRuntimeRoot, privateRuntimeRoot, legacyRuntimeRoot)
-            .flatMap { directory -> directory.listFiles()?.filter { it.isDirectory }.orEmpty() })
-            .distinctBy { it.canonicalPath }
+        val entries = amethystRuntimeRoot.listFiles()
+            ?.filter { it.isDirectory && File(it, "release").isFile }
+            .orEmpty()
 
         return entries.mapNotNull { directory ->
-            val homeCandidates = listOf(directory, File(directory, "jre"))
-            homeCandidates.firstNotNullOfOrNull { home ->
-                val releaseFile = File(home, "release")
-                if (!releaseFile.isFile) return@firstNotNullOfOrNull null
+            // MultiRTUtils reads exactly runtimes/<name>/release. A nested
+            // runtimes/<name>/jre/release folder is not visible to Amethyst.
+            val home = directory
+            val releaseFile = File(home, "release")
+            val properties = parseRelease(releaseFile)
+            val versionText = properties["JAVA_VERSION"].orEmpty().trim('"')
+            val major = parseJavaMajor(versionText) ?: return@mapNotNull null
+            val arch = properties["OS_ARCH"].orEmpty().trim('"')
+            val jvmCandidates = listOf(
+                File(home, "lib/server/libjvm.so"),
+                File(home, "lib/client/libjvm.so"),
+                File(home, "lib/amd64/server/libjvm.so"),
+                File(home, "lib/amd64/client/libjvm.so"),
+                File(home, "lib/aarch64/server/libjvm.so"),
+                File(home, "lib/aarch64/client/libjvm.so"),
+                File(home, "lib/arm/server/libjvm.so"),
+                File(home, "lib/arm/client/libjvm.so"),
+                File(home, "lib/x86_64/server/libjvm.so"),
+                File(home, "lib/x86/server/libjvm.so")
+            )
+            val jvm = jvmCandidates.firstOrNull { it.isFile } ?: return@mapNotNull null
+            if (!isDeviceCompatible(arch)) return@mapNotNull null
 
-                val properties = parseRelease(releaseFile)
-                val versionText = properties["JAVA_VERSION"].orEmpty().trim('"')
-                val major = parseJavaMajor(versionText) ?: return@firstNotNullOfOrNull null
-                val arch = properties["OS_ARCH"].orEmpty().trim('"')
-
-                val jvmCandidates = listOf(
-                    File(home, "lib/server/libjvm.so"),
-                    File(home, "lib/client/libjvm.so"),
-                    File(home, "lib/amd64/server/libjvm.so"),
-                    File(home, "lib/amd64/client/libjvm.so"),
-                    File(home, "lib/aarch64/server/libjvm.so"),
-                    File(home, "lib/aarch64/client/libjvm.so"),
-                    File(home, "lib/arm/server/libjvm.so"),
-                    File(home, "lib/arm/client/libjvm.so"),
-                    File(home, "lib/x86_64/server/libjvm.so"),
-                    File(home, "lib/x86/server/libjvm.so")
-                )
-                val jvm = jvmCandidates.firstOrNull { it.isFile }
-                    ?: return@firstNotNullOfOrNull null
-
-                if (!isDeviceCompatible(arch)) return@firstNotNullOfOrNull null
-
-                DetectedJavaRuntime(
-                    name = directory.name,
-                    majorVersion = major,
-                    version = versionText,
-                    architecture = arch,
-                    home = home,
-                    jvmLibrary = jvm
-                )
-            }
+            DetectedJavaRuntime(
+                name = directory.name,
+                majorVersion = major,
+                version = versionText,
+                architecture = arch,
+                home = home,
+                jvmLibrary = jvm
+            )
         }.sortedBy { it.majorVersion }
     }
 
@@ -255,12 +259,38 @@ class JavaRuntimeManager(private val context: Context) {
         val oldRoots = listOf(privateRuntimeRoot, legacyRuntimeRoot)
         oldRoots.forEach { oldRoot ->
             oldRoot.listFiles()?.filter { it.isDirectory }?.forEach { oldRuntime ->
-                val destination = File(amethystRuntimeRoot, oldRuntime.name)
-                if (!destination.exists() && File(oldRuntime, "release").isFile) {
-                    runCatching {
-                        if (!amethystRuntimeRoot.exists()) amethystRuntimeRoot.mkdirs()
-                        oldRuntime.copyRecursively(destination, overwrite = false)
+                val sourceHome = listOf(oldRuntime, File(oldRuntime, "jre"))
+                    .firstOrNull { File(it, "release").isFile }
+                    ?: return@forEach
+
+                // Flatten legacy nested JRE layouts into the exact structure
+                // Amethyst MultiRT expects, while leaving the original untouched.
+                val destinationName = if (sourceHome == oldRuntime) {
+                    oldRuntime.name
+                } else {
+                    "${oldRuntime.name}-flat"
+                }
+                val destination = File(amethystRuntimeRoot, destinationName)
+                if (File(destination, "release").isFile) return@forEach
+
+                runCatching {
+                    if (!amethystRuntimeRoot.exists() && !amethystRuntimeRoot.mkdirs()) {
+                        throw IOException("Cannot create Amethyst runtime directory.")
                     }
+                    sourceHome.copyRecursively(destination, overwrite = false)
+                }
+            }
+        }
+
+        // Also recover nested installs already present inside Amethyst's runtime
+        // root by copying their JRE contents to a sibling flat directory.
+        amethystRuntimeRoot.listFiles()?.filter {
+            it.isDirectory && !File(it, "release").isFile && File(File(it, "jre"), "release").isFile
+        }?.forEach { nestedRuntime ->
+            val destination = File(amethystRuntimeRoot, "${nestedRuntime.name}-flat")
+            if (!File(destination, "release").isFile) {
+                runCatching {
+                    File(nestedRuntime, "jre").copyRecursively(destination, overwrite = false)
                 }
             }
         }
