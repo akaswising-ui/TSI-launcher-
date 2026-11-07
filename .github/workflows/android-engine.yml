@@ -111,8 +111,12 @@ jobs:
 
           required = [
               "Lcom/tsi/launcher/MainActivity;",
-              "Add Offline Account",
+              "Account manager",
               "Offline username",
+              "Continue with Microsoft",
+              "Create a free Microsoft account",
+              "File Manager access",
+              "OPEN FILE ACCESS SETTINGS",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
