@@ -2,6 +2,7 @@ package com.tsi.launcher.runtime
 
 import android.content.Context
 import android.os.Build
+import com.tsi.launcher.data.MinecraftLibraryResolver
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -99,9 +100,10 @@ class JavaRuntimeManager(private val context: Context) {
                     for (index in 0 until libraries.length()) {
                         val library = libraries.optJSONObject(index) ?: continue
                         if (!libraryAllowed(library)) continue
-                        val downloads = library.optJSONObject("downloads") ?: continue
-                        val artifact = downloads.optJSONObject("artifact") ?: continue
-                        val relativePath = artifact.optString("path")
+                        // Use the same resolver as installation so legacy
+                        // pre-1.13 libraries are included in the VM preflight.
+                        val artifact = MinecraftLibraryResolver.resolve(library) ?: continue
+                        val relativePath = artifact.path
                         if (relativePath.isBlank() || relativePath.startsWith("/") ||
                             relativePath.contains('\\')
                         ) continue
@@ -111,8 +113,10 @@ class JavaRuntimeManager(private val context: Context) {
                         if (!local.path.startsWith(libraryRoot.path + File.separator)) continue
 
                         libraryCount++
-                        val expectedSize = artifact.optLong("size", -1L)
-                        if (local.isFile && (expectedSize <= 0L || local.length() == expectedSize)) {
+                        val expectedSize = artifact.size
+                        if (local.isFile && local.length() > 0L &&
+                            (expectedSize <= 0L || local.length() == expectedSize)
+                        ) {
                             installedLibraryCount++
                         }
                     }
