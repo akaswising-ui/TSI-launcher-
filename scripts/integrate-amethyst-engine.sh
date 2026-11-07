@@ -22,6 +22,7 @@ gradle_properties = root / "gradle.properties"
 app_gradle = root / "app_pojavlauncher/build.gradle"
 manifest_path = root / "app_pojavlauncher/src/main/AndroidManifest.xml"
 application_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/PojavApplication.java"
+main_activity_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/MainActivity.java"
 
 def replace_once(text: str, old: str, new: str, description: str) -> str:
     count = text.count(old)
@@ -139,6 +140,49 @@ application = replace_once(
     "Amethyst default preferences initialization",
 )
 application_path.write_text(application)
+
+# Amethyst's default touch controls are packaged in assets/default.json but its
+# default CTRLDEF_FILE points to an external-files path. Ensure it exists exactly
+# when the game Activity loads controls, before LayoutConverter opens the file.
+main_activity = main_activity_path.read_text()
+control_loader = "    private void loadControls() {\\n        try {"
+control_loader_with_bootstrap = (
+    "    private void ensureDefaultControlMap() throws java.io.IOException {\\n"
+    "        java.io.File target = new java.io.File(Tools.CTRLDEF_FILE);\\n"
+    "        if (target.isFile() && target.length() > 0L) return;\\n"
+    "        java.io.File parent = target.getParentFile();\\n"
+    "        if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {\\n"
+    "            throw new java.io.IOException(\\"Could not create Amethyst controlmap directory: \\" + parent);\\n"
+    "        }\\n"
+    "        java.io.File temporary = new java.io.File(parent, \\"default.json.tmp\\");\\n"
+    "        try (java.io.InputStream input = getAssets().open(\\"default.json\\");\\n"
+    "             java.io.FileOutputStream output = new java.io.FileOutputStream(temporary)) {\\n"
+    "            byte[] buffer = new byte[8192];\\n"
+    "            int count;\\n"
+    "            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);\\n"
+    "            output.getFD().sync();\\n"
+    "        }\\n"
+    "        if (!temporary.isFile() || temporary.length() == 0L) {\\n"
+    "            throw new java.io.IOException(\\"Amethyst bundled default controls are empty.\\");\\n"
+    "        }\\n"
+    "        if (target.exists() && !target.delete()) {\\n"
+    "            temporary.delete();\\n"
+    "            throw new java.io.IOException(\\"Cannot replace empty default control layout.\\");\\n"
+    "        }\\n"
+    "        if (!temporary.renameTo(target)) {\\n"
+    "            temporary.delete();\\n"
+    "            throw new java.io.IOException(\\"Cannot install default control layout.\\");\\n"
+    "        }\\n"
+    "    }\\n\\n"
+    "    private void loadControls() {\\n        try {\\n            ensureDefaultControlMap();"
+)
+main_activity = replace_once(
+    main_activity,
+    control_loader,
+    control_loader_with_bootstrap,
+    "Amethyst default control map bootstrap",
+)
+main_activity_path.write_text(main_activity)
 
 manifest = manifest_path.read_text()
 test_marker = '<activity\n            android:name=".TestStorageActivity"'
