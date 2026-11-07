@@ -4,10 +4,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
-    <queries>
-        <package android:name="com.mojang.minecraftpe" />
-    </queries>
-
     <application
         android:allowBackup="false"
         android:label="TSI Launcher"
