@@ -1343,6 +1343,20 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
     var selectedChannel by rememberSaveable { mutableStateOf(BedrockChannel.ALL) }
     var catalogMessage by remember { mutableStateOf("Loading official Bedrock channels…") }
     var catalogLoading by remember { mutableStateOf(false) }
+    val catalogScope = rememberCoroutineScope()
+
+    suspend fun refreshBedrockCatalog() {
+        catalogLoading = true
+        catalogMessage = "Refreshing official Bedrock channels…"
+        try {
+            entries = BedrockVersionCatalog.fetch(context)
+            catalogMessage = "Official channel catalogue updated."
+        } catch (error: Exception) {
+            catalogMessage = "Using built-in official links. Refresh failed: ${error.message ?: "network unavailable"}"
+        } finally {
+            catalogLoading = false
+        }
+    }
 
     LaunchedEffect(Unit) {
         catalogLoading = true
@@ -1493,13 +1507,10 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(catalogMessage, color = Color(0xFF9AAAB8), fontSize = 11.sp, modifier = Modifier.weight(1f))
                     TextButton(
-                        onClick = {
-                            // LaunchedEffect owns initial loading; tapping refresh reloads
-                            // the remote catalogue without blocking the UI thread.
-                            catalogMessage = "Refresh the Bedrock catalogue by reopening this edition tab."
-                        }
+                        enabled = !catalogLoading,
+                        onClick = { catalogScope.launch { refreshBedrockCatalog() } }
                     ) {
-                        Text(if (catalogLoading) "LOADING" else "CATALOG", color = Color(0xFF62D6A0), fontSize = 10.sp)
+                        Text(if (catalogLoading) "LOADING" else "REFRESH", color = Color(0xFF62D6A0), fontSize = 10.sp)
                     }
                 }
             }
