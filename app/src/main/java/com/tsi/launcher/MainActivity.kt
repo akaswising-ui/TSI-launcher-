@@ -486,7 +486,8 @@ private fun TsiLauncherApp() {
                 TextButton(onClick = { profileDialogOpen = false }) { Text("Cancel") }
             }
         )
-    }}
+    }
+}
 
 @Composable
 private fun EditionTab(
