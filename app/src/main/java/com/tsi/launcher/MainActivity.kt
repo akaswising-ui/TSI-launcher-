@@ -116,17 +116,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.tsi.launcher.bedrock.BedrockIntegration
-import com.tsi.launcher.bedrock.BedrockChannel
-import com.tsi.launcher.bedrock.BedrockVersionEntry
-import com.tsi.launcher.bedrock.BedrockVersionCatalog
-import com.tsi.launcher.bedrock.BedrockVersionHistoryStore
-import com.tsi.launcher.bedrock.BedrockHistoryEntry
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import com.tsi.launcher.data.JavaGameInstaller
 import com.tsi.launcher.runtime.AmethystEngineBridge
+import com.tsi.launcher.runtime.DevicePerformanceProfile
 import com.tsi.launcher.data.MinecraftVersion
 import com.tsi.launcher.data.VersionFilter
 import com.tsi.launcher.data.VersionManifestRepository
@@ -145,7 +138,6 @@ private val TsiLine = Color(0xFFDCE7EA)
 
 class MainActivity : ComponentActivity() {
     var onLauncherResumed: (() -> Unit)? = null
-    var onBedrockResumed: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,12 +147,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         onLauncherResumed?.invoke()
-        onBedrockResumed?.invoke()
     }
 }
 
 private enum class MainSection { DASHBOARD, VM_CONTROLLER, MOD_PACKS, NEWS, SETTINGS }
-private enum class Edition { JAVA, BEDROCK }
 
 @Composable
 private fun TsiLauncherApp() {
@@ -174,7 +164,6 @@ private fun TsiLauncherApp() {
     val scope = rememberCoroutineScope()
 
     var section by rememberSaveable { mutableStateOf(MainSection.DASHBOARD) }
-    var edition by rememberSaveable { mutableStateOf(Edition.JAVA) }
     var versions by remember { mutableStateOf<List<MinecraftVersion>>(emptyList()) }
     var selectedFilter by rememberSaveable { mutableStateOf(VersionFilter.ALL) }
     var selectedVersionId by rememberSaveable { mutableStateOf("") }
@@ -186,7 +175,9 @@ private fun TsiLauncherApp() {
         mutableStateOf(preferences.getString("profile_name", "Steve001") ?: "Steve001")
     }
     var ramMb by rememberSaveable {
-        mutableFloatStateOf(preferences.getInt("ram_mb", 768).toFloat())
+        val recommended = DevicePerformanceProfile.recommendedHeapMb(context)
+        val saved = preferences.getInt("ram_mb", recommended)
+        mutableFloatStateOf(DevicePerformanceProfile.clampHeap(context, saved).toFloat())
     }
     var javaRuntime by rememberSaveable {
         mutableStateOf(preferences.getString("java_runtime", "Auto") ?: "Auto")
@@ -315,27 +306,7 @@ private fun TsiLauncherApp() {
                             }
                         }
                     }
-                    if (section == MainSection.DASHBOARD) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 18.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            EditionTab(
-                                title = "JAVA EDITION",
-                                selected = edition == Edition.JAVA,
-                                modifier = Modifier.weight(1f),
-                                onClick = { edition = Edition.JAVA }
-                            )
-                            EditionTab(
-                                title = "BEDROCK EDITION",
-                                selected = edition == Edition.BEDROCK,
-                                modifier = Modifier.weight(1f),
-                                onClick = { edition = Edition.BEDROCK }
-                            )
-                        }
-                    }
+
                 }
             },
             bottomBar = {
@@ -395,7 +366,6 @@ private fun TsiLauncherApp() {
             ) { target ->
                 when (target) {
                     MainSection.DASHBOARD -> {
-                        if (edition == Edition.JAVA) {
                             JavaDashboard(
                                 versions = versions,
                                 selectedFilter = selectedFilter,
@@ -437,12 +407,6 @@ private fun TsiLauncherApp() {
                                     }
                                 }
                             )
-                        } else {
-                            BedrockDashboard(
-                                modifier = Modifier.fillMaxSize(),
-                                searchQuery = searchQuery
-                            )
-                        }
                     }
                     MainSection.VM_CONTROLLER -> VirtualMachineControllerScreen(
                         modifier = Modifier.fillMaxSize(),
@@ -463,8 +427,9 @@ private fun TsiLauncherApp() {
                         modifier = Modifier.fillMaxSize(),
                         ramMb = ramMb,
                         onRamChange = {
-                            ramMb = it
-                            preferences.edit().putInt("ram_mb", it.toInt()).apply()
+                            val safeHeap = DevicePerformanceProfile.clampHeap(context, it.toInt())
+                            ramMb = safeHeap.toFloat()
+                            preferences.edit().putInt("ram_mb", safeHeap).apply()
                         },
                         javaRuntime = javaRuntime,
                         onJavaRuntimeChange = {
@@ -561,42 +526,6 @@ private fun TsiLauncherApp() {
             dismissButton = {
                 TextButton(onClick = { profileDialogOpen = false }) { Text("Cancel") }
             }
-        )
-    }
-}
-
-@Composable
-private fun EditionTab(
-    title: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val tint by animateColorAsState(
-        targetValue = if (selected) TsiTealDark else TsiMuted,
-        animationSpec = tween(220),
-        label = "edition-tab-color"
-    )
-    Column(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(top = 9.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            title,
-            color = tint,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            fontSize = 13.sp,
-            letterSpacing = 0.4.sp,
-            modifier = Modifier.padding(vertical = 5.dp)
-        )
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(3.dp)
-                .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                .background(if (selected) TsiTeal else Color.Transparent)
         )
     }
 }
@@ -1342,401 +1271,6 @@ private fun StatusBanner(message: String, isLoading: Boolean) {
 }
 
 @Composable
-private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String = "") {
-    val context = LocalContext.current
-    var status by remember { mutableStateOf(BedrockIntegration.readInstallStatus(context)) }
-    var launchMessage by remember { mutableStateOf("") }
-    var entries by remember { mutableStateOf(BedrockVersionCatalog.builtInFallback()) }
-    var selectedChannel by rememberSaveable { mutableStateOf(BedrockChannel.ALL) }
-    var catalogMessage by remember { mutableStateOf("Loading official Bedrock channels…") }
-    var catalogLoading by remember { mutableStateOf(false) }
-    var history by remember { mutableStateOf(BedrockVersionHistoryStore.read(context)) }
-    var selectedTrack by remember { mutableStateOf(BedrockVersionHistoryStore.selectedTrack(context)) }
-    val catalogScope = rememberCoroutineScope()
-
-    fun refreshInstalledPackage() {
-        status = BedrockIntegration.readInstallStatus(context)
-        history = BedrockVersionHistoryStore.recordInstalledPackage(context, status)
-        selectedTrack = BedrockVersionHistoryStore.selectedTrack(context)
-    }
-
-    fun selectTrack(track: String) {
-        history = BedrockVersionHistoryStore.selectTrack(context, track)
-        selectedTrack = BedrockVersionHistoryStore.selectedTrack(context)
-    }
-
-    suspend fun refreshBedrockCatalog() {
-        catalogLoading = true
-        catalogMessage = "Refreshing official Bedrock channels…"
-        try {
-            entries = BedrockVersionCatalog.fetch()
-            catalogMessage = "Official channel catalogue updated."
-        } catch (error: Exception) {
-            catalogMessage = "Using built-in official links. Refresh failed: ${error.message ?: "network unavailable"}"
-        } finally {
-            catalogLoading = false
-        }
-    }
-
-    fun openChannelEntry(entry: BedrockVersionEntry) {
-        try {
-            when (entry.id) {
-                "stable" -> selectTrack(BedrockVersionHistoryStore.TRACK_STABLE)
-                "beta" -> selectTrack(BedrockVersionHistoryStore.TRACK_BETA)
-                // Android Preview is documented as the in-place Beta track, not a separate app.
-            }
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.actionUrl)))
-        } catch (error: Exception) {
-            launchMessage = error.message ?: "Could not open the official Minecraft page."
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        refreshInstalledPackage()
-        catalogLoading = true
-        try {
-            entries = BedrockVersionCatalog.fetch()
-            catalogMessage = "Official channel catalogue updated."
-        } catch (error: Exception) {
-            catalogMessage = "Using built-in official links. Catalogue refresh failed: ${error.message ?: "network unavailable"}"
-        } finally {
-            catalogLoading = false
-        }
-    }
-
-    val hostActivity = context as? MainActivity
-    androidx.compose.runtime.DisposableEffect(hostActivity) {
-        hostActivity?.onBedrockResumed = { refreshInstalledPackage() }
-        onDispose {
-            hostActivity?.onBedrockResumed = null
-        }
-    }
-
-    val filteredEntries = entries.filter { entry ->
-        (selectedChannel == BedrockChannel.ALL || entry.channel == selectedChannel) &&
-            (searchQuery.isBlank() ||
-                entry.name.contains(searchQuery, ignoreCase = true) ||
-                entry.versionLabel.contains(searchQuery, ignoreCase = true) ||
-                entry.badge.contains(searchQuery, ignoreCase = true))
-    }
-
-    Column(modifier = modifier.background(Color(0xFF0B1017))) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D)),
-                    elevation = CardDefaults.cardElevation(0.dp)
-                ) {
-                    Column(
-                        Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(11.dp)
-                    ) {
-                        Text("INSTALLED ANDROID CLIENT", color = Color(0xFF9AAAB8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Minecraft Bedrock",
-                                color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 20.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Surface(
-                                color = if (status.installed) Color(0xFF174B37) else Color(0xFF59411F),
-                                shape = RoundedCornerShape(50)
-                            ) {
-                                Text(
-                                    if (status.installed) "INSTALLED" else "NOT INSTALLED",
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                    color = if (status.installed) Color(0xFF83E0B0) else Color(0xFFFFCE83),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp
-                                )
-                            }
-                        }
-                        Text(
-                            if (status.installed) "Version ${status.versionName ?: "Unknown"}  •  Code ${status.versionCode ?: 0L}"
-                            else status.message,
-                            color = Color(0xFFCAD5DE),
-                            fontSize = 13.sp
-                        )
-                        Text(
-                            "Package: ${BedrockIntegration.OFFICIAL_PACKAGE}",
-                            color = Color(0xFF9AAAB8),
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            "Last selected Android channel: $selectedTrack",
-                            color = Color(0xFF62D6A0),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            "This is your saved channel choice only. Android does not expose Play Beta enrollment status to TSI.",
-                            color = Color(0xFF9AAAB8),
-                            fontSize = 11.sp
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                onClick = { refreshInstalledPackage(); launchMessage = "" },
-                                shape = RoundedCornerShape(24.dp)
-                            ) {
-                                Icon(Icons.Filled.Refresh, null)
-                                Spacer(Modifier.width(5.dp))
-                                Text("CHECK")
-                            }
-                            Button(
-                                enabled = status.installed,
-                                onClick = {
-                                    try {
-                                        BedrockIntegration.launchInstalledGame(context)
-                                        launchMessage = "Opening the installed Minecraft app…"
-                                    } catch (error: Exception) {
-                                        launchMessage = error.message ?: "Could not open Minecraft"
-                                    }
-                                },
-                                shape = RoundedCornerShape(24.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF35B978))
-                            ) {
-                                Icon(Icons.Filled.PlayArrow, null)
-                                Spacer(Modifier.width(5.dp))
-                                Text("PLAY INSTALLED")
-                            }
-                        }
-                        if (launchMessage.isNotBlank()) {
-                            Text(launchMessage, color = Color(0xFFB3C0CB), fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF19352F))
-                ) {
-                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("STABLE AND BETA SHARE ONE ANDROID APP", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text(
-                            "Joining the official Android Beta updates the same Minecraft package. It replaces the normal client, so Stable and Beta cannot be installed side-by-side. Use Google Play to join or leave the testing track.",
-                            color = Color(0xFFD1E4DD),
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-
-            item {
-                Text("VERSION CHANNELS", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-                Text(
-                    "Official Android release and testing channels. Google Play handles downloads, signatures and updates.",
-                    color = Color(0xFF9AAAB8),
-                    fontSize = 12.sp
-                )
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    listOf(
-                        BedrockChannel.ALL,
-                        BedrockChannel.VANILLA,
-                        BedrockChannel.PREVIEW,
-                        BedrockChannel.BETA
-                    ).forEach { channel ->
-                        FilterChip(
-                            selected = selectedChannel == channel,
-                            onClick = { selectedChannel = channel },
-                            label = { Text(channel.label) },
-                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF176A55),
-                                selectedLabelColor = Color.White,
-                                labelColor = Color(0xFFCAD5DE),
-                                containerColor = Color(0xFF17232D)
-                            )
-                        )
-                    }
-                }
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(catalogMessage, color = Color(0xFF9AAAB8), fontSize = 11.sp, modifier = Modifier.weight(1f))
-                    TextButton(
-                        enabled = !catalogLoading,
-                        onClick = { catalogScope.launch { refreshBedrockCatalog() } }
-                    ) {
-                        Text(if (catalogLoading) "LOADING" else "REFRESH", color = Color(0xFF62D6A0), fontSize = 10.sp)
-                    }
-                }
-            }
-
-            if (filteredEntries.isEmpty()) {
-                item {
-                    Text("No matching Bedrock channel found.", color = Color(0xFFCAD5DE), modifier = Modifier.padding(18.dp))
-                }
-            }
-
-            items(filteredEntries, key = { it.id }) { entry ->
-                BedrockVersionCard(entry = entry) { openChannelEntry(entry) }
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("VERSION HISTORY", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { history = BedrockVersionHistoryStore.read(context) }) {
-                        Text("RELOAD", color = Color(0xFF62D6A0), fontSize = 10.sp)
-                    }
-                }
-                Text(
-                    "Local history of version changes observed by TSI. It is saved on this device.",
-                    color = Color(0xFF9AAAB8),
-                    fontSize = 11.sp
-                )
-            }
-
-            if (history.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D))
-                    ) {
-                        Text(
-                            "No version changes recorded yet. TSI will add an entry when it first detects the installed app or notices a new version.",
-                            color = Color(0xFFB3C0CB),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(15.dp)
-                        )
-                    }
-                }
-            }
-
-            items(history, key = { it.id }) { item ->
-                BedrockHistoryCard(item)
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D))
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("About Android Preview", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text(
-                            "Android Bedrock uses the in-place Beta track. There is no separate Preview app package on Android.",
-                            color = Color(0xFF9AAAB8),
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BedrockHistoryCard(entry: BedrockHistoryEntry) {
-    val title = when (entry.eventType) {
-        "VERSION_OBSERVED" -> "Installed version detected"
-        "TRACK_SELECTED" -> "Channel selected in TSI"
-        else -> "Bedrock history event"
-    }
-    val timeLabel = remember(entry.timestamp) {
-        SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(entry.timestamp))
-    }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D)),
-        elevation = CardDefaults.cardElevation(0.dp)
-    ) {
-        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Text(entry.selectedTrack, color = Color(0xFF62D6A0), fontWeight = FontWeight.Bold, fontSize = 9.sp)
-            }
-            Text(
-                "${entry.versionName}  •  Code ${entry.versionCode}",
-                color = Color(0xFFCAD5DE),
-                fontSize = 12.sp
-            )
-            Text(entry.packageName, color = Color(0xFF9AAAB8), fontSize = 10.sp)
-            Text(timeLabel, color = Color(0xFF9AAAB8), fontSize = 10.sp)
-        }
-    }
-}
-
-@Composable
-private fun BedrockVersionCard(
-    entry: BedrockVersionEntry,
-    onAction: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF17232D)),
-        elevation = CardDefaults.cardElevation(1.dp)
-    ) {
-        Column(
-            Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    entry.name,
-                    modifier = Modifier.weight(1f),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-                Surface(
-                    color = when (entry.channel) {
-                        BedrockChannel.VANILLA -> Color(0xFF194A37)
-                        BedrockChannel.PREVIEW -> Color(0xFF3B3264)
-                        BedrockChannel.BETA -> Color(0xFF65421E)
-                        BedrockChannel.ALL -> Color(0xFF263642)
-                    },
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Text(
-                        entry.badge,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 9.sp
-                    )
-                }
-            }
-            Text(entry.versionLabel, color = Color(0xFF62D6A0), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text(entry.description, color = Color(0xFFB3C0CB), fontSize = 12.sp)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.PhoneAndroid, contentDescription = null, tint = Color(0xFF9AAAB8), modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(entry.sizeLabel, color = Color(0xFF9AAAB8), fontSize = 11.sp, modifier = Modifier.weight(1f))
-            }
-            Button(
-                onClick = onAction,
-                enabled = entry.enabled,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF176A55))
-            ) {
-                Icon(Icons.Filled.Download, null)
-                Spacer(Modifier.width(7.dp))
-                Text(entry.actionLabel)
-            }
-        }
-    }
-}
-
-@Composable
 private fun NewsScreen(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
@@ -1805,14 +1339,15 @@ private fun SettingsScreen(
                     Text("Java memory target", color = TsiInk, fontWeight = FontWeight.Bold)
                 }
                 Text("${ramMb.toInt()} MB", color = TsiTealDark, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                val maximumHeapMb = DevicePerformanceProfile.maxHeapMb(context)
                 Slider(
-                    value = ramMb,
+                    value = ramMb.coerceIn(512f, maximumHeapMb.toFloat()),
                     onValueChange = onRamChange,
-                    valueRange = 512f..4096f,
-                    steps = 6
+                    valueRange = 512f..maximumHeapMb.toFloat(),
+                    steps = ((maximumHeapMb - 512) / 256 - 1).coerceAtLeast(0)
                 )
                 Text(
-                    "Requested heap limit only. The runtime must also respect the phone's available memory.",
+                    "Recommended: ${DevicePerformanceProfile.recommendedHeapMb(context)} MB. Device-safe limit: $maximumHeapMb MB. This is a JVM heap ceiling, not total game memory.",
                     color = TsiMuted,
                     fontSize = 11.sp
                 )
