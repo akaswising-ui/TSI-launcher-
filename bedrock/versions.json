@@ -1,0 +1,38 @@
+[
+  {
+    "id": "bedrock-stable",
+    "name": "Minecraft Bedrock for Android",
+    "channel": "vanilla",
+    "badge": "STABLE",
+    "versionLabel": "Latest stable release",
+    "sizeLabel": "Size and update delivered by Google Play",
+    "description": "Official stable Minecraft app. TSI checks the installed package and opens the Google Play listing for install or update.",
+    "actionLabel": "OPEN GOOGLE PLAY",
+    "actionUrl": "https://play.google.com/store/apps/details?id=com.mojang.minecraftpe",
+    "enabled": true
+  },
+  {
+    "id": "bedrock-preview",
+    "name": "Minecraft Preview",
+    "channel": "preview",
+    "badge": "PREVIEW",
+    "versionLabel": "Latest preview offered in your region",
+    "sizeLabel": "Size delivered by Google Play",
+    "description": "Official Preview app listing. Availability and eligibility are controlled by Mojang and Google Play.",
+    "actionLabel": "CHECK PREVIEW",
+    "actionUrl": "https://play.google.com/store/apps/details?id=com.mojang.minecraftpreview",
+    "enabled": true
+  },
+  {
+    "id": "bedrock-beta",
+    "name": "Minecraft Android Beta",
+    "channel": "beta",
+    "badge": "BETA",
+    "versionLabel": "Current official testing track",
+    "sizeLabel": "Managed by Google Play",
+    "description": "Join or leave the official beta track. The Google account must own Minecraft and the beta may have limited capacity.",
+    "actionLabel": "OPEN BETA PROGRAM",
+    "actionUrl": "https://play.google.com/apps/testing/com.mojang.minecraftpe",
+    "enabled": true
+  }
+]
