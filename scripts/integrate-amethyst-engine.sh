@@ -254,12 +254,12 @@ manifest = replace_once(
 # Its normal flow opens LauncherActivity and retains the original Pojav UI.
 # The TSI Java dashboard is a separate internal screen opened from that UI.
 launcher_activity = (
-    '        <activity\\n'
-    '            android:name="com.tsi.launcher.MainActivity"\\n'
-    '            android:exported="false"\\n'
-    '            android:label="TSI Java Edition Dashboard" />\\n'
+    '        <activity\n'
+    '            android:name="com.tsi.launcher.MainActivity"\n'
+    '            android:exported="false"\n'
+    '            android:label="TSI Java Edition Dashboard" />\n'
 )
-marker = '        <activity\\n            android:name=".MissingStorageActivity"'
+marker = '        <activity\n            android:name=".MissingStorageActivity"'
 manifest = replace_once(
     manifest,
     marker,
@@ -272,27 +272,27 @@ main_menu = main_menu_path.read_text()
 main_menu = replace_once(
     main_menu,
     '        Button mOpenDirectoryButton = view.findViewById(R.id.open_files_button);',
-    '        Button mOpenDirectoryButton = view.findViewById(R.id.open_files_button);\\n'
+    '        Button mOpenDirectoryButton = view.findViewById(R.id.open_files_button);\n'
     '        Button mTsiJavaDashboardButton = view.findViewById(R.id.tsi_java_dashboard_button);',
     "TSI Java dashboard menu button binding",
 )
 main_menu = replace_once(
     main_menu,
     '        mVersionSpinner = view.findViewById(R.id.mc_version_spinner);',
-    '        mVersionSpinner = view.findViewById(R.id.mc_version_spinner);\\n'
-    '        mTsiJavaDashboardButton.setOnClickListener(v ->\\n'
+    '        mVersionSpinner = view.findViewById(R.id.mc_version_spinner);\n'
+    '        mTsiJavaDashboardButton.setOnClickListener(v ->\n'
     '                startActivity(new Intent(requireContext(), com.tsi.launcher.MainActivity.class)));',
     "TSI Java dashboard menu button action",
 )
 main_menu_path.write_text(main_menu)
 
 menu_button = (
-    '            <com.kdt.mcgui.LauncherMenuButton\\n'
-    '                android:id="@+id/tsi_java_dashboard_button"\\n'
-    '                style="@style/LauncherMenuButton.Universal"\\n'
-    '                android:layout_width="match_parent"\\n'
-    '                android:drawableStart="@drawable/ic_menu_settings"\\n'
-    '                android:text="TSI Java Edition Dashboard"\\n'
+    '            <com.kdt.mcgui.LauncherMenuButton\n'
+    '                android:id="@+id/tsi_java_dashboard_button"\n'
+    '                style="@style/LauncherMenuButton.Universal"\n'
+    '                android:layout_width="match_parent"\n'
+    '                android:drawableStart="@drawable/ic_menu_settings"\n'
+    '                android:text="TSI Java Edition Dashboard"\n'
     '                app:layout_constraintTop_toBottomOf="@id/open_files_button" />'
 )
 for layout_path in (main_menu_layout_path, main_menu_land_layout_path):
@@ -300,7 +300,7 @@ for layout_path in (main_menu_layout_path, main_menu_land_layout_path):
     layout = replace_once(
         layout,
         '                app:layout_constraintTop_toBottomOf="@id/share_logs_button" />',
-        '                app:layout_constraintTop_toBottomOf="@id/share_logs_button" />\\n\\n' + menu_button,
+        '                app:layout_constraintTop_toBottomOf="@id/share_logs_button" />\n\n' + menu_button,
         f"TSI Java dashboard button in {layout_path.name}",
     )
     layout_path.write_text(layout)
