@@ -17,7 +17,7 @@ The original Amethyst/Pojav launcher home remains the Android app entry screen. 
 - Account management through Amethyst's Microsoft login flow; local profiles are clearly offline profiles.
 - VM preflight checks before launch.
 
-The engine-integrated debug APK is assembled by `.github/workflows/android-engine.yml` using the pinned Amethyst Android revision. A successful CI build verifies APK packaging and DEX contents. It does **not** prove that every historical Minecraft version will run on every phone; renderer, LWJGL, native-library and Java-version requirements vary by release.
+The engine-integrated debug APK is assembled by `.github/workflows/android-engine.yml` using the pinned Amethyst Android revision. The direct Java Edition download is [app-debug.apk](https://github.com/akaswising-ui/TSI-launcher-Java-edition/releases/download/android-debug-latest/app-debug.apk). This release asset is produced by the engine workflow, not the dashboard-only shell workflow. A successful CI build verifies APK packaging, the app ID and the original Pojav launcher entry. It does **not** prove that every historical Minecraft version will run on every phone; renderer, LWJGL, native-library and Java-version requirements vary by release.
 
 ## Vivo Y22 / 6 GB RAM profile
 
@@ -56,7 +56,7 @@ The CI workflow checks out the pinned upstream Amethyst Android source, applies 
 ./gradlew :app_pojavlauncher:assembleDebug
 ```
 
-The build output is staged as `TSI-Launcher-engine-debug.apk` and published by the workflow when the build succeeds.
+The build output is staged as `TSI-Launcher-engine-debug.apk`, uploaded as a 90-day Actions artifact, and published as `app-debug.apk` in the `android-debug-latest` Release. The separate `TSI-dashboard-shell-smoke-only` artifact is only a Compose compile check and does not contain the Minecraft game engine. Do not install it as the playable launcher.
 
 ## Scope and compatibility
 
