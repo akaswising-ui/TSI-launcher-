@@ -111,7 +111,7 @@ private val packPreviews = listOf(
         "A placeholder for compatible visual enhancements.",
         Color(0xFF575A9A), Color(0xFFB6A4E6), "VFX"
     ),
-remove Bedrock catalogue)
+)
 
 @Composable
 fun ModPackManagerScreen(
