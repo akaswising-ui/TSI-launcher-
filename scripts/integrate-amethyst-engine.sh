@@ -23,6 +23,7 @@ app_gradle = root / "app_pojavlauncher/build.gradle"
 manifest_path = root / "app_pojavlauncher/src/main/AndroidManifest.xml"
 application_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/PojavApplication.java"
 main_activity_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/MainActivity.java"
+profile_type_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/ProfileTypeSelectFragment.java"
 
 def replace_once(text: str, old: str, new: str, description: str) -> str:
     count = text.count(old)
@@ -183,6 +184,31 @@ main_activity = replace_once(
     "Amethyst default control map bootstrap",
 )
 main_activity_path.write_text(main_activity)
+
+# Creating a Vanilla/OptiFine/Forge/Fabric/etc. launcher profile is not an
+# entitlement check. Keep Microsoft ownership checks at game launch/server
+# authentication, but do not block local profile setup for offline accounts.
+profile_type = profile_type_path.read_text()
+old_gate = """    private void tryInstall(Class<? extends Fragment> fragmentClass, String tag){
+        if(!hasOnlineProfile()){
+            hasNoOnlineProfileDialog(requireActivity());
+        } else {
+            Tools.swapFragment(requireActivity(), fragmentClass, tag, null);
+        }
+    }"""
+new_gate = """    private void tryInstall(Class<? extends Fragment> fragmentClass, String tag){
+        // Profile creation and loader installation do not grant a Minecraft
+        // license. Offline users may prepare profiles; authenticated online
+        // services and multiplayer still enforce their normal account checks.
+        Tools.swapFragment(requireActivity(), fragmentClass, tag, null);
+    }"""
+profile_type = replace_once(
+    profile_type,
+    old_gate,
+    new_gate,
+    "offline-compatible profile creation gate",
+)
+profile_type_path.write_text(profile_type)
 
 manifest = manifest_path.read_text()
 manifest = replace_once(
