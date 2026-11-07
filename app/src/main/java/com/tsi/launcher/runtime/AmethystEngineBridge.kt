@@ -146,6 +146,13 @@ object AmethystEngineBridge {
         }
     }
 
+    /** Returns the current account channel for the dashboard status pill. */
+    fun selectedAccountMode(context: Context): String = when {
+        selectedAccountUsername(context) == null -> "No account"
+        selectedAccountIsMicrosoft(context) -> "Microsoft"
+        else -> "Offline"
+    }
+
     /** Returns the selected Amethyst account username, if one is saved. */
     fun selectedAccountUsername(context: Context): String? {
         val accountName = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
@@ -220,7 +227,40 @@ object AmethystEngineBridge {
         if (!selected) {
             throw IOException("Could not save the selected offline account.")
         }
+
+        // Validate with Amethyst's own account parser, not just TSI's JSON
+        // reader. This catches schema/path/preference mismatches before the
+        // game activity starts and avoids a false "no account" launcher state.
+        verifyAmethystOfflineAccount(context, playerName)
         return accountFile
+    }
+
+    private fun verifyAmethystOfflineAccount(context: Context, username: String) {
+        try {
+            val accountClass = Class.forName("net.kdt.pojavlaunch.value.MinecraftAccount")
+            val account = accountClass
+                .getMethod("load", String::class.java)
+                .invoke(null, username)
+                ?: throw IOException("Amethyst could not load the local account file.")
+
+            val isLocal = accountClass.getMethod("isLocal").invoke(account) as? Boolean
+            if (isLocal != true) {
+                throw IOException("Amethyst did not classify $username as a local offline account.")
+            }
+
+            val profileClass = Class.forName("net.kdt.pojavlaunch.PojavProfile")
+            val selectedName = profileClass
+                .getMethod("getCurrentProfileName", Context::class.java)
+                .invoke(null, context) as? String
+
+            if (selectedName != username) {
+                throw IOException("Amethyst did not select the local account $username.")
+            }
+        } catch (error: IOException) {
+            throw error
+        } catch (error: Exception) {
+            throw IOException("Amethyst could not validate the selected local account.", error)
+        }
     }
 
     fun launch(
