@@ -76,8 +76,7 @@ import androidx.compose.ui.unit.sp
 
 private enum class PackSection(val title: String) {
     JAVA("Java Edition"),
-    MODDING("Modding"),
-    BEDROCK("Bedrock Edition")
+    MODDING("Modding")
 }
 
 private data class PackPreview(
@@ -112,27 +111,7 @@ private val packPreviews = listOf(
         "A placeholder for compatible visual enhancements.",
         Color(0xFF575A9A), Color(0xFFB6A4E6), "VFX"
     ),
-    PackPreview(
-        "bedrock-creatures", "Fantasy Creatures", "Bedrock Add-on", "Preview",
-        "A sample Bedrock add-on listing. No files are installed.",
-        Color(0xFF438C6A), Color(0xFFB4D98E), "MOB"
-    ),
-    PackPreview(
-        "bedrock-biomes", "Better Biomes", "Bedrock Add-on", "Preview",
-        "A sample world-generation add-on listing.",
-        Color(0xFF3B7F68), Color(0xFFB4D5A0), "BIO"
-    ),
-    PackPreview(
-        "bedrock-islands", "Sky Islands", "Bedrock World", "Preview",
-        "A sample world template listing for the manager design.",
-        Color(0xFF3978A6), Color(0xFFB5DAF1), "SKY"
-    ),
-    PackPreview(
-        "bedrock-decor", "Medieval Decor", "Bedrock Add-on", "Preview",
-        "A sample building and decoration add-on listing.",
-        Color(0xFF85664F), Color(0xFFE2C18F), "DEC"
-    )
-)
+remove Bedrock catalogue)
 
 @Composable
 fun ModPackManagerScreen(
@@ -141,7 +120,7 @@ fun ModPackManagerScreen(
     searchQuery: String,
     onInstancesClick: () -> Unit
 ) {
-    var selectedSection by rememberSaveable { mutableStateOf(PackSection.BEDROCK) }
+    var selectedSection by rememberSaveable { mutableStateOf(PackSection.JAVA) }
     var selectedPack by remember { mutableStateOf<PackPreview?>(null) }
 
     BoxWithConstraints(
@@ -300,7 +279,7 @@ private fun ManagerContent(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "Manage Java mods and Bedrock add-ons",
+                    "Browse Java mod packs and modding resources",
                     color = Color(0xFF9CA8A3),
                     fontSize = 11.sp
                 )
@@ -333,7 +312,7 @@ private fun ManagerContent(
                 val selected = selectedSection == section
                 val bg by animateColorAsState(
                     if (selected) {
-                        if (section == PackSection.BEDROCK) Color(0xFFB9DDAF) else Color(0xFFE2D2D2)
+                        Color(0xFFE2D2D2)
                     } else Color.Transparent,
                     tween(240),
                     label = "pack-section-color"
@@ -365,7 +344,7 @@ private fun ManagerContent(
                 PackSection.MODDING -> packPreviews.filter {
                     it.id.startsWith("java-") && it.category != "Java Mod Pack"
                 }
-                PackSection.BEDROCK -> packPreviews.filter { it.id.startsWith("bedrock-") }
+ 
             }
             categoryPacks.filter {
                 searchQuery.isBlank() ||
@@ -380,7 +359,7 @@ private fun ManagerContent(
                     when (selectedSection) {
                         PackSection.JAVA -> "Java mod packs"
                         PackSection.MODDING -> "Modding tools & resources"
-                        PackSection.BEDROCK -> "Bedrock add-ons"
+ 
                     },
                     color = Color(0xFFE8EFEB),
                     fontWeight = FontWeight.Bold,
