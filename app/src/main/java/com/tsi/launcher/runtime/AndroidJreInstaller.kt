@@ -45,6 +45,14 @@ class AndroidJreInstaller(context: Context) {
 
     fun supportedRuntimeMajors(): List<Int> = listOf(8, 17, 21, 25)
 
+    /**
+     * Returns the lowest bundled Android JRE that satisfies a Minecraft
+     * version's minimum Java major. Java 17 can run Java 16-targeted releases;
+     * Java 25 can run Java 22–25-targeted releases.
+     */
+    fun recommendedRuntimeMajor(requiredMajor: Int): Int? =
+        supportedRuntimeMajors().firstOrNull { it >= requiredMajor }
+
     fun deviceArchitecture(): String? {
         val abi = Build.SUPPORTED_ABIS.firstOrNull()?.lowercase(Locale.ROOT) ?: return null
         return when {
