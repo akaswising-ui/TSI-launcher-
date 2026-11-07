@@ -34,7 +34,7 @@ text = replace_once(
     text,
     "    id 'com.android.library' version '9.3.1' apply false",
     "    id 'com.android.library' version '9.3.1' apply false\n"
-    "    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.21' apply false",
+    "    id 'org.jetbrains.kotlin.plugin.compose' version '2.4.21' apply false",
     "root Kotlin plugin insertion",
 )
 root_gradle.write_text(text)
