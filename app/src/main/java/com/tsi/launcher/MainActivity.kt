@@ -1,6 +1,11 @@
 package com.tsi.launcher
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
@@ -131,9 +136,16 @@ private val TsiMuted = Color(0xFF71838B)
 private val TsiLine = Color(0xFFDCE7EA)
 
 class MainActivity : ComponentActivity() {
+    var onLauncherResumed: (() -> Unit)? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { TsiLauncherApp() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        onLauncherResumed?.invoke()
     }
 }
 
@@ -172,7 +184,22 @@ private fun TsiLauncherApp() {
     var profileDialogOpen by remember { mutableStateOf(false) }
     var profileDraft by remember { mutableStateOf(profileName) }
     var profileError by remember { mutableStateOf("") }
+    var storageAccessRefreshKey by remember { mutableIntStateOf(0) }
     var overflowOpen by remember { mutableStateOf(false) }
+
+    val hostActivity = context as? MainActivity
+    androidx.compose.runtime.DisposableEffect(hostActivity) {
+        hostActivity?.onLauncherResumed = {
+            storageAccessRefreshKey++
+            AmethystEngineBridge.selectedAccountUsername(context)?.let { selectedUsername ->
+                profileName = selectedUsername
+                preferences.edit().putString("profile_name", selectedUsername).apply()
+            }
+        }
+        onDispose {
+            hostActivity?.onLauncherResumed = null
+        }
+    }
 
     suspend fun refreshVersions() {
         isLoading = true
@@ -190,7 +217,13 @@ private fun TsiLauncherApp() {
         }
     }
 
-    LaunchedEffect(Unit) { refreshVersions() }
+    LaunchedEffect(Unit) {
+        AmethystEngineBridge.selectedAccountUsername(context)?.let { selectedUsername ->
+            profileName = selectedUsername
+            preferences.edit().putString("profile_name", selectedUsername).apply()
+        }
+        refreshVersions()
+    }
 
     MaterialTheme(colorScheme = lightColorScheme(
         primary = TsiTeal,
@@ -427,7 +460,8 @@ private fun TsiLauncherApp() {
                         onJavaRuntimeChange = {
                             javaRuntime = it
                             preferences.edit().putString("java_runtime", it).apply()
-                        }
+                        },
+                        storageAccessRefreshKey = storageAccessRefreshKey
                     )
                 }
             }
@@ -437,7 +471,7 @@ private fun TsiLauncherApp() {
     if (profileDialogOpen) {
         AlertDialog(
             onDismissRequest = { profileDialogOpen = false },
-            title = { Text("Add Offline Account") },
+            title = { Text("Account manager") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -451,7 +485,39 @@ private fun TsiLauncherApp() {
                         isError = profileError.isNotBlank()
                     )
                     Text(
-                        "Use 3–16 letters, numbers or underscores. This creates a local account without Microsoft sign-in.",
+                        "Use 3–16 letters, numbers or underscores to create a local offline account.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TsiMuted
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                AmethystEngineBridge.openMicrosoftAccountManager(context)
+                                profileDialogOpen = false
+                            } catch (error: Exception) {
+                                profileError = error.message ?: "Could not open Microsoft sign-in."
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Continue with Microsoft")
+                    }
+                    TextButton(
+                        onClick = {
+                            try {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse("https://signup.live.com/"))
+                                )
+                            } catch (error: Exception) {
+                                profileError = "Could not open Microsoft's account signup page."
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Create a free Microsoft account")
+                    }
+                    Text(
+                        "A Microsoft account is free. Minecraft Java Edition still requires its own game license.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TsiMuted
                     )
@@ -1407,8 +1473,13 @@ private fun SettingsScreen(
     ramMb: Float,
     onRamChange: (Float) -> Unit,
     javaRuntime: String,
-    onJavaRuntimeChange: (String) -> Unit
+    onJavaRuntimeChange: (String) -> Unit,
+    storageAccessRefreshKey: Int
 ) {
+    val context = LocalContext.current
+    val hasAllFilesAccess = remember(storageAccessRefreshKey) {
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
+    }
     var javaMenuExpanded by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
@@ -1481,6 +1552,63 @@ private fun SettingsScreen(
                     color = TsiMuted,
                     fontSize = 11.sp
                 )
+            }
+        }
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Column(
+                Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Text("File Manager access", color = TsiInk, fontWeight = FontWeight.Bold)
+                Text(
+                    if (hasAllFilesAccess) "Manage all files access is enabled."
+                    else "Manage all files access is not enabled.",
+                    color = if (hasAllFilesAccess) TsiTealDark else TsiMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "This optional Android permission allows access to shared-storage files. Android still blocks other apps' Android/data folders.",
+                    color = TsiMuted,
+                    fontSize = 11.sp
+                )
+                Button(
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            val appSettings = Intent(
+                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            try {
+                                context.startActivity(appSettings)
+                            } catch (_: Exception) {
+                                try {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                    )
+                                } catch (_: Exception) {
+                                    // This Android build does not expose the special-access settings page.
+                                }
+                            }
+                        }
+                    },
+                    enabled = !hasAllFilesAccess && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = TsiTeal)
+                ) {
+                    Text(
+                        when {
+                            hasAllFilesAccess -> "FILE ACCESS ENABLED"
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> "OPEN FILE ACCESS SETTINGS"
+                            else -> "NOT REQUIRED ON THIS ANDROID VERSION"
+                        }
+                    )
+                }
             }
         }
     }
