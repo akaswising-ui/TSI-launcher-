@@ -79,6 +79,47 @@ jobs:
           chmod +x gradlew
           ./gradlew :app_pojavlauncher:assembleDebug --no-daemon --stacktrace
 
+      - name: Verify TSI Kotlin UI was compiled into the engine APK
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import struct
+          import zipfile
+
+          apk = ".build/Amethyst-Android/app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk"
+          dex_strings = set()
+          with zipfile.ZipFile(apk) as archive:
+              dex_files = [name for name in archive.namelist()
+                           if name.startswith("classes") and name.endswith(".dex")]
+              if not dex_files:
+                  raise SystemExit("Engine APK contains no DEX files.")
+              for dex_name in dex_files:
+                  dex = archive.read(dex_name)
+                  if len(dex) < 112 or not dex.startswith(b"dex\\n"):
+                      raise SystemExit(f"Invalid DEX file: {dex_name}")
+                  string_count, string_offset = struct.unpack_from("<II", dex, 56)
+                  for index in range(string_count):
+                      position = struct.unpack_from("<I", dex, string_offset + index * 4)[0]
+                      cursor = position
+                      while dex[cursor] & 0x80:
+                          cursor += 1
+                      cursor += 1
+                      end = dex.find(b"\\0", cursor)
+                      if end < 0:
+                          raise SystemExit(f"Invalid DEX string table in {dex_name}")
+                      dex_strings.add(dex[cursor:end].decode("utf-8", "replace"))
+
+          required = [
+              "Lcom/tsi/launcher/MainActivity;",
+              "Add Offline Account",
+              "Offline username",
+          ]
+          missing = [item for item in required if item not in dex_strings]
+          if missing:
+              raise SystemExit("TSI Compose code is missing from the APK DEX: " + ", ".join(missing))
+          print("Verified TSI MainActivity and Add Offline Account UI in APK DEX.")
+          PY
+
       - name: Stage TSI engine APK
         shell: bash
         run: |
