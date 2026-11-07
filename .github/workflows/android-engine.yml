@@ -153,8 +153,8 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/36.1.0/aapt"
           test -x "$AAPT"
           BADGING="$("$AAPT" dump badging "$APK")"
-          grep -F "package: name='com.tsi.launcher'" <<< "$BADGING"
-          grep -F "launchable-activity: name='net.kdt.pojavlaunch.TestStorageActivity'" <<< "$BADGING"
+          grep -E "^package: name='com\\.tsi\\.launcher(\\.debug)?'" <<< "$BADGING"
+          grep -E "^launchable-activity: name='net\\.kdt\\.pojavlaunch\\.TestStorageActivity'([[:space:]]|$)" <<< "$BADGING"
           if grep -F "launchable-activity: name='com.tsi.launcher.MainActivity'" <<< "$BADGING"; then
             echo "TSI dashboard must not replace the original Pojav launcher entry."
             exit 1
