@@ -1,4 +1,4 @@
-name: Android Debug APK
+name: TSI Dashboard Shell CI (No Minecraft Engine)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -51,25 +51,6 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TSI-Launcher-debug
+          name: TSI-dashboard-shell-smoke-only
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-
-      - name: Publish direct APK download on GitHub Releases
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          APK_PATH: app/build/outputs/apk/debug/app-debug.apk
-          RELEASE_TAG: android-debug-latest
-        shell: bash
-        run: |
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$APK_PATH" --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$RELEASE_TAG" "$APK_PATH" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "TSI Launcher Android Debug APK" \
-              --notes "Latest automatically-built TSI Launcher debug APK. This is an unsigned debug build for testing." \
-              --prerelease \
-              --target "$GITHUB_SHA"
-          fi
