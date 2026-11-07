@@ -214,6 +214,19 @@ profile_type = replace_once(
 )
 profile_type_path.write_text(profile_type)
 
+# Fail the build if the offline profile-creation route accidentally regresses
+# to Amethyst's generic Microsoft-ownership gate. This gate is not needed to
+# create a local profile or install a local loader profile.
+try_install_match = re.search(
+    r"private void tryInstall\\([^)]*\\)\\s*\\{(.*?)\\n    \\}",
+    profile_type,
+    flags=re.DOTALL,
+)
+if try_install_match is None:
+    raise SystemExit("Could not verify ProfileTypeSelectFragment.tryInstall().")
+if "hasOnlineProfile()" in try_install_match.group(1) or "hasNoOnlineProfileDialog" in try_install_match.group(1):
+    raise SystemExit("Offline profile setup is still blocked by the Microsoft-account gate.")
+
 launcher_source = launcher_activity_path.read_text()
 original_resume = """    protected void onResume() {
         super.onResume();
