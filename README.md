@@ -2,6 +2,10 @@
 
 An Android launcher dedicated to **Minecraft Java Edition**. Bedrock-specific screens, package detection and version-channel catalogues live in the separate [TSI Launcher Bedrock Edition repository](https://github.com/akaswising-ui/TSI-Launcher-Bedrock-edition-).
 
+## Launcher interface
+
+The original Amethyst/Pojav launcher home remains the Android app entry screen. The TSI Java Edition dashboard is a separate screen opened from the **TSI Java Edition Dashboard** button in that home screen. This keeps the normal launcher UI and the TSI runtime/version manager separate while sharing the same embedded Java engine.
+
 ## Java Edition features
 
 - Java version catalogue from Mojang's official manifest.
