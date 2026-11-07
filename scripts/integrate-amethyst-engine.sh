@@ -188,7 +188,7 @@ manifest = manifest_path.read_text()
 manifest = replace_once(
     manifest,
     '    <uses-permission android:name="android.permission.INTERNET" />',
-    '    <uses-permission android:name="android.permission.INTERNET" />\\n'
+    '    <uses-permission android:name="android.permission.INTERNET" />\n'
     '    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />',
     "optional all-files access permission",
 )
