@@ -131,6 +131,55 @@ object AmethystEngineBridge {
      * Existing account files are preserved so an account with saved data is
      * never overwritten by the launcher UI.
      */
+    /**
+     * Opens Amethyst's native account manager, which contains its official
+     * Microsoft sign-in and entitlement-validation flow.
+     */
+    fun openMicrosoftAccountManager(context: Context) {
+        try {
+            val intent = Intent()
+                .setClassName(context, "net.kdt.pojavlaunch.LauncherActivity")
+            if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (error: Exception) {
+            throw IOException("Amethyst account manager could not be opened.", error)
+        }
+    }
+
+    /** Returns the selected Amethyst account username, if one is saved. */
+    fun selectedAccountUsername(context: Context): String? {
+        val accountName = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
+            .getString(PROFILE_PREF_FILE, null)
+            ?.trim()
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9_]{1,64}")) }
+            ?: return null
+
+        val dataRoot = context.filesDir.parentFile ?: context.filesDir
+        val accountFile = File(File(dataRoot, "accounts"), "$accountName.json")
+        if (!accountFile.isFile) return null
+        return runCatching {
+            JSONObject(accountFile.readText(Charsets.UTF_8))
+                .optString("username")
+                .trim()
+                .takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun selectedAccountIsMicrosoft(context: Context): Boolean {
+        val accountName = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
+            .getString(PROFILE_PREF_FILE, null)
+            ?.trim()
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9_]{1,64}")) }
+            ?: return false
+
+        val dataRoot = context.filesDir.parentFile ?: context.filesDir
+        val accountFile = File(File(dataRoot, "accounts"), "$accountName.json")
+        return runCatching {
+            accountFile.isFile &&
+                JSONObject(accountFile.readText(Charsets.UTF_8)).optBoolean("isMicrosoft", false)
+        }.getOrDefault(false)
+    }
+
     fun addOfflineAccount(context: Context, username: String): File {
         val playerName = username.trim()
         require(playerName.matches(Regex("[A-Za-z0-9_]{3,16}"))) {
@@ -322,8 +371,11 @@ object AmethystEngineBridge {
         launcherProfiles.put("profiles", profiles)
         writeAtomically(profilesFile, launcherProfiles.toString(2))
 
-        // Ensure the selected local account exists before opening Amethyst.
-        addOfflineAccount(context, playerName)
+        // Preserve an authenticated Microsoft account selected inside Amethyst.
+        // Only choose TSI's local account when a Microsoft account is not active.
+        if (!selectedAccountIsMicrosoft(context)) {
+            addOfflineAccount(context, playerName)
+        }
 
         // Match AndroidX PreferenceManager's default preference file name without
         // forcing the standalone TSI APK to depend on androidx.preference.
