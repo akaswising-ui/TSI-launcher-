@@ -273,7 +273,7 @@ private fun ManagerContent(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Unified Mod Pack Manager",
+                    "Java Edition Mod Manager",
                     color = Color(0xFFF2F4F1),
                     fontSize = 21.sp,
                     fontWeight = FontWeight.Bold
