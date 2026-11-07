@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 
 data class DetectedJavaRuntime(
@@ -258,10 +259,10 @@ class JavaRuntimeManager(private val context: Context) {
     private fun migrateLegacyRuntimes() {
         val oldRoots = listOf(privateRuntimeRoot, legacyRuntimeRoot)
         oldRoots.forEach { oldRoot ->
-            oldRoot.listFiles()?.filter { it.isDirectory }?.forEach { oldRuntime ->
+            oldRoot.listFiles()?.filter { it.isDirectory }?.forEach runtimeLoop@ { oldRuntime ->
                 val sourceHome = listOf(oldRuntime, File(oldRuntime, "jre"))
                     .firstOrNull { File(it, "release").isFile }
-                    ?: return@forEach
+                    ?: return@runtimeLoop
 
                 // Flatten legacy nested JRE layouts into the exact structure
                 // Amethyst MultiRT expects, while leaving the original untouched.
@@ -271,7 +272,7 @@ class JavaRuntimeManager(private val context: Context) {
                     "${oldRuntime.name}-flat"
                 }
                 val destination = File(amethystRuntimeRoot, destinationName)
-                if (File(destination, "release").isFile) return@forEach
+                if (File(destination, "release").isFile) return@runtimeLoop
 
                 runCatching {
                     if (!amethystRuntimeRoot.exists() && !amethystRuntimeRoot.mkdirs()) {
