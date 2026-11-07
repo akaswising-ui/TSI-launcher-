@@ -25,6 +25,9 @@ application_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/P
 main_activity_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/MainActivity.java"
 launcher_activity_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/LauncherActivity.java"
 profile_type_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/ProfileTypeSelectFragment.java"
+main_menu_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/MainMenuFragment.java"
+main_menu_layout_path = root / "app_pojavlauncher/src/main/res/layout/fragment_launcher.xml"
+main_menu_land_layout_path = root / "app_pojavlauncher/src/main/res/layout-land/fragment_launcher.xml"
 
 def replace_once(text: str, old: str, new: str, description: str) -> str:
     count = text.count(old)
@@ -247,41 +250,60 @@ manifest = replace_once(
     '    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />',
     "optional all-files access permission",
 )
-test_marker = '<activity\n            android:name=".TestStorageActivity"'
-start = manifest.find(test_marker)
-if start < 0:
-    raise SystemExit("Could not find Amethyst TestStorageActivity block")
-end = manifest.find("</activity>", start)
-if end < 0:
-    raise SystemExit("TestStorageActivity closing tag is missing")
-end += len("</activity>")
-block = manifest[start:end]
-block, removed = re.subn(r'\s*<intent-filter>[\s\S]*?</intent-filter>', '', block, count=1)
-if removed != 1:
-    raise SystemExit("Could not remove TestStorageActivity launcher filter")
-manifest = manifest[:start] + block + manifest[end:]
-
+# Keep Amethyst's original TestStorageActivity as the Android app entry point.
+# Its normal flow opens LauncherActivity and retains the original Pojav UI.
+# The TSI Java dashboard is a separate internal screen opened from that UI.
 launcher_activity = (
-    '        <activity\n'
-    '            android:name="com.tsi.launcher.MainActivity"\n'
-    '            android:exported="true"\n'
-    '            android:label="TSI Launcher">\n'
-    '            <intent-filter>\n'
-    '                <action android:name="android.intent.action.MAIN" />\n'
-    '                <category android:name="android.intent.category.LAUNCHER" />\n'
-    '            </intent-filter>\n'
-    '        </activity>\n'
+    '        <activity\\n'
+    '            android:name="com.tsi.launcher.MainActivity"\\n'
+    '            android:exported="false"\\n'
+    '            android:label="TSI Java Edition Dashboard" />\\n'
 )
-marker = '        <activity\n            android:name=".MissingStorageActivity"'
-manifest = replace_once(manifest, marker, launcher_activity + marker, "TSI launcher activity insertion")
-
+marker = '        <activity\\n            android:name=".MissingStorageActivity"'
 manifest = replace_once(
     manifest,
-    '    <queries>\n',
-    '    <queries>\n        <package android:name="com.mojang.minecraftpe" />\n',
-    "Bedrock package visibility declaration",
+    marker,
+    launcher_activity + marker,
+    "internal TSI Java dashboard activity declaration",
 )
 manifest_path.write_text(manifest)
+
+main_menu = main_menu_path.read_text()
+main_menu = replace_once(
+    main_menu,
+    '        Button mOpenDirectoryButton = view.findViewById(R.id.open_files_button);',
+    '        Button mOpenDirectoryButton = view.findViewById(R.id.open_files_button);\\n'
+    '        Button mTsiJavaDashboardButton = view.findViewById(R.id.tsi_java_dashboard_button);',
+    "TSI Java dashboard menu button binding",
+)
+main_menu = replace_once(
+    main_menu,
+    '        mVersionSpinner = view.findViewById(R.id.mc_version_spinner);',
+    '        mVersionSpinner = view.findViewById(R.id.mc_version_spinner);\\n'
+    '        mTsiJavaDashboardButton.setOnClickListener(v ->\\n'
+    '                startActivity(new Intent(requireContext(), com.tsi.launcher.MainActivity.class)));',
+    "TSI Java dashboard menu button action",
+)
+main_menu_path.write_text(main_menu)
+
+menu_button = (
+    '            <com.kdt.mcgui.LauncherMenuButton\\n'
+    '                android:id="@+id/tsi_java_dashboard_button"\\n'
+    '                style="@style/LauncherMenuButton.Universal"\\n'
+    '                android:layout_width="match_parent"\\n'
+    '                android:drawableStart="@drawable/ic_menu_settings"\\n'
+    '                android:text="TSI Java Edition Dashboard"\\n'
+    '                app:layout_constraintTop_toBottomOf="@id/open_files_button" />'
+)
+for layout_path in (main_menu_layout_path, main_menu_land_layout_path):
+    layout = layout_path.read_text()
+    layout = replace_once(
+        layout,
+        '                app:layout_constraintTop_toBottomOf="@id/share_logs_button" />',
+        '                app:layout_constraintTop_toBottomOf="@id/share_logs_button" />\\n\\n' + menu_button,
+        f"TSI Java dashboard button in {layout_path.name}",
+    )
+    layout_path.write_text(layout)
 PY
 
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
