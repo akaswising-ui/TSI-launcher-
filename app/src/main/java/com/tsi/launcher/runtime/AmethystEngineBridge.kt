@@ -21,7 +21,7 @@ import kotlinx.coroutines.delay
  * also where AndroidJreInstaller installs the Android OpenJDK packages.
  */
 object AmethystEngineBridge {
-    private const val LAUNCHER_ACTIVITY = "net.kdt.pojavlaunch.MainActivity"
+    private const val LAUNCHER_ACTIVITY = "net.kdt.pojavlaunch.LauncherActivity"
     private const val PROFILE_PREFS = "pojav_profile"
     private const val PROFILE_PREF_FILE = "file"
     private const val PROFILE_PREFIX = "amethyst://"
@@ -290,7 +290,7 @@ object AmethystEngineBridge {
 
         val launchIntent = Intent()
             .setClassName(context, LAUNCHER_ACTIVITY)
-            .putExtra("intent_version", safeVersion)
+            .putExtra("tsi_auto_launch", true)
 
         if (context !is Activity) {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
