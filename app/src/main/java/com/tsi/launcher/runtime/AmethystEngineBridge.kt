@@ -126,6 +126,54 @@ object AmethystEngineBridge {
         progress("Amethyst JVM host, SDL, LWJGL OpenGL/OpenAL JARs, renderer and input components are ready.")
     }
 
+    /**
+     * Create and select an Amethyst-compatible offline/local player account.
+     * Existing account files are preserved so an account with saved data is
+     * never overwritten by the launcher UI.
+     */
+    fun addOfflineAccount(context: Context, username: String): File {
+        val playerName = username.trim()
+        require(playerName.matches(Regex("[A-Za-z0-9_]{3,16}"))) {
+            "Offline username must be 3–16 characters using letters, numbers or underscore."
+        }
+
+        val dataRoot = context.filesDir.parentFile ?: context.filesDir
+        val accountsDirectory = File(dataRoot, "accounts")
+        if (!accountsDirectory.exists() && !accountsDirectory.mkdirs()) {
+            throw IOException("Could not create Amethyst's local account directory.")
+        }
+
+        val accountFile = File(accountsDirectory, "$playerName.json")
+        if (!accountFile.isFile) {
+            val account = JSONObject()
+                .put("accessToken", "0")
+                .put("clientToken", "0")
+                .put("profileId", "00000000-0000-0000-0000-000000000000")
+                .put("username", playerName)
+                .put("isMicrosoft", false)
+            writeAtomically(accountFile, account.toString(2))
+        } else {
+            // Do not silently select a malformed file under an otherwise valid name.
+            try {
+                val existing = JSONObject(accountFile.readText(Charsets.UTF_8))
+                require(existing.optString("username").isNotBlank()) {
+                    "The existing offline account file is invalid."
+                }
+            } catch (error: Exception) {
+                throw IOException("Could not read the existing Amethyst account for $playerName.", error)
+            }
+        }
+
+        val selected = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PROFILE_PREF_FILE, playerName)
+            .commit()
+        if (!selected) {
+            throw IOException("Could not save the selected offline account.")
+        }
+        return accountFile
+    }
+
     fun launch(
         context: Context,
         versionId: String,
@@ -268,23 +316,8 @@ object AmethystEngineBridge {
         launcherProfiles.put("profiles", profiles)
         writeAtomically(profilesFile, launcherProfiles.toString(2))
 
-        // Amethyst stores its local/offline account separately from launcher_profiles.json.
-        val dataRoot = context.filesDir.parentFile ?: context.filesDir
-        val accountsDirectory = File(dataRoot, "accounts")
-        if (!accountsDirectory.exists() && !accountsDirectory.mkdirs()) {
-            throw IOException("Could not create Amethyst's local account directory.")
-        }
-        val accountFile = File(accountsDirectory, "$playerName.json")
-        // Preserve an existing Amethyst account file, including any valid sign-in tokens.
-        if (!accountFile.isFile) {
-            val account = JSONObject()
-                .put("accessToken", "0")
-                .put("clientToken", "0")
-                .put("profileId", "00000000-0000-0000-0000-000000000000")
-                .put("username", playerName)
-                .put("isMicrosoft", false)
-            writeAtomically(accountFile, account.toString(2))
-        }
+        // Ensure the selected local account exists before opening Amethyst.
+        addOfflineAccount(context, playerName)
 
         // Match AndroidX PreferenceManager's default preference file name without
         // forcing the standalone TSI APK to depend on androidx.preference.
@@ -300,15 +333,6 @@ object AmethystEngineBridge {
             throw IOException("Could not persist Amethyst's selected runtime and profile preferences.")
         }
 
-        // MainActivity runs in Amethyst's separate :game process. Commit this value
-        // before starting it so PojavProfile can read the selected account on disk.
-        val accountSelectionSaved = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(PROFILE_PREF_FILE, playerName)
-            .commit()
-        if (!accountSelectionSaved) {
-            throw IOException("Could not persist Amethyst's selected local player account.")
-        }
     }
 
     private fun writeAtomically(destination: File, content: String) {
