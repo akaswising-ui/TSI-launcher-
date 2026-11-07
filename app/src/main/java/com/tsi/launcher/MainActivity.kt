@@ -174,6 +174,9 @@ private fun TsiLauncherApp() {
     var profileName by rememberSaveable {
         mutableStateOf(preferences.getString("profile_name", "Steve001") ?: "Steve001")
     }
+    var accountMode by rememberSaveable {
+        mutableStateOf(AmethystEngineBridge.selectedAccountMode(context))
+    }
     var ramMb by rememberSaveable {
         val recommended = DevicePerformanceProfile.recommendedHeapMb(context)
         val saved = preferences.getInt("ram_mb", recommended)
@@ -196,6 +199,7 @@ private fun TsiLauncherApp() {
                 profileName = selectedUsername
                 preferences.edit().putString("profile_name", selectedUsername).apply()
             }
+            accountMode = AmethystEngineBridge.selectedAccountMode(context)
         }
         onDispose {
             hostActivity?.onLauncherResumed = null
@@ -223,6 +227,7 @@ private fun TsiLauncherApp() {
             profileName = selectedUsername
             preferences.edit().putString("profile_name", selectedUsername).apply()
         }
+        accountMode = AmethystEngineBridge.selectedAccountMode(context)
         refreshVersions()
     }
 
@@ -377,6 +382,7 @@ private fun TsiLauncherApp() {
                                 statusMessage = statusMessage,
                                 onRefresh = { scope.launch { refreshVersions() } },
                                 profileName = profileName,
+                                accountMode = accountMode,
                                 onAddProfile = {
                                     profileDraft = profileName
                                     profileError = ""
@@ -514,6 +520,7 @@ private fun TsiLauncherApp() {
                         try {
                             AmethystEngineBridge.addOfflineAccount(context.applicationContext, cleaned)
                             profileName = cleaned
+                            accountMode = "Offline"
                             preferences.edit().putString("profile_name", cleaned).apply()
                             statusMessage = "Offline account '$cleaned' added and selected."
                             profileDialogOpen = false
@@ -542,6 +549,7 @@ private fun JavaDashboard(
     statusMessage: String,
     onRefresh: () -> Unit,
     profileName: String,
+    accountMode: String,
     onAddProfile: () -> Unit,
     activeDownload: String?,
     onOpenVmController: () -> Unit,
@@ -572,7 +580,11 @@ private fun JavaDashboard(
                 .padding(horizontal = if (wideLayout) 24.dp else 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            ProfileStrip(profileName = profileName, onAddProfile = onAddProfile)
+            ProfileStrip(
+                profileName = profileName,
+                accountMode = accountMode,
+                onAddProfile = onAddProfile
+            )
 
             if (wideLayout) {
                 Row(
@@ -649,7 +661,7 @@ private fun JavaDashboard(
 }
 
 @Composable
-private fun ProfileStrip(profileName: String, onAddProfile: () -> Unit) {
+private fun ProfileStrip(profileName: String, accountMode: String, onAddProfile: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
@@ -664,9 +676,9 @@ private fun ProfileStrip(profileName: String, onAddProfile: () -> Unit) {
         Spacer(Modifier.width(8.dp))
         ProfilePill(
             eyebrow = "MODE",
-            name = "Offline_Guest",
+            name = accountMode,
             icon = Icons.Filled.Person,
-            active = false
+            active = accountMode != "No account"
         )
         Spacer(Modifier.width(4.dp))
         Surface(
