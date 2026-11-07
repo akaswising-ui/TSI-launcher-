@@ -271,19 +271,20 @@ object AmethystEngineBridge {
             .take(16)
             .let { if (it.length in 3..16) it else "Steve" }
 
+        val safeHeapMb = DevicePerformanceProfile.clampHeap(context, heapMb.toInt())
         writeAmethystProfile(
             context = context,
             minecraftRoot = minecraftRoot,
             versionId = safeVersion,
             runtimeName = runtime.name,
             playerName = safePlayer,
-            heapMb = heapMb.toInt().coerceIn(512, 16384)
+            heapMb = safeHeapMb
         )
         activateAmethystRuntime(
             context = context,
             runtimeName = runtime.name,
             expectedMajor = runtime.majorVersion,
-            heapMb = heapMb.toInt().coerceIn(512, 16384)
+            heapMb = safeHeapMb
         )
 
         val launchIntent = Intent()
