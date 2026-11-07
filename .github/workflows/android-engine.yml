@@ -122,7 +122,7 @@ jobs:
               "VERSION HISTORY",
               "Installed version detected",
               "Last selected Android channel: ",
-              "The separate Minecraft Preview app is not an independently installed Android client.",
+              "Android Bedrock uses the in-place Beta track. There is no separate Preview app package on Android.",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
