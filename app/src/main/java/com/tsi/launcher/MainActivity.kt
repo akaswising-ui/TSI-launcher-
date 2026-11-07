@@ -1630,7 +1630,7 @@ private fun BedrockDashboard(modifier: Modifier = Modifier, searchQuery: String 
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("About Android Preview", color = Color.White, fontWeight = FontWeight.Bold)
                         Text(
-                            "The Android mobile flow uses the in-place Beta track. The separate Minecraft Preview app is not an independently installed Android client. TSI therefore does not invent a second Preview package or claim it is installed.",
+                            "Android Bedrock uses the in-place Beta track. There is no separate Preview app package on Android.",
                             color = Color(0xFF9AAAB8),
                             fontSize = 12.sp
                         )
